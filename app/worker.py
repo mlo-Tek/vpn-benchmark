@@ -248,26 +248,18 @@ def iperf_mbps(data, reverse):
     return round(float(bps) / 1e6, 2) if bps else None
 
 
-async def open_ports(host, ports, timeout=2.0):
-    """Public servers often run only a few ports of a big range: find the open ones first."""
-    async def one(p):
-        try:
-            _, w = await asyncio.wait_for(asyncio.open_connection(host, p), timeout)
-            w.close()
-            return p
-        except Exception:  # noqa: BLE001
-            return None
-    return [p for p in await asyncio.gather(*(one(p) for p in ports)) if p]
-
-
-async def iperf_once(host, ports, reverse, parallel, duration, tries=3):
+async def iperf_once(host, ports, reverse, parallel, duration):
+    """Try the server's ports one after another (shuffled). Closed ports refuse instantly, so
+    big ranges where only a few ports are open still resolve quickly. Do not pre-probe the
+    ports: iperf3 serves one client at a time and a probe connection would block the test."""
     ports = list(ports)
-    if len(ports) > 4:
-        ports = await open_ports(host, ports) or ports
     random.shuffle(ports)
-    errors = []
-    for port in ports[:tries]:
-        cmd = ["iperf3", "-c", host, "-4", "-p", str(port), "--connect-timeout", "4000",
+    errors, started = [], time.monotonic()
+    for port in ports[:30]:
+        if time.monotonic() - started > 25:  # a host that silently drops packets: give up
+            errors.append("Zeitbudget für diesen Server erschöpft")
+            break
+        cmd = ["iperf3", "-c", host, "-4", "-p", str(port), "--connect-timeout", "3000",
                "-P", str(parallel), "-t", str(duration), "-J"] + (["-R"] if reverse else [])
         try:
             p = await asyncio.create_subprocess_exec(
