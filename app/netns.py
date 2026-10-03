@@ -39,6 +39,9 @@ def csv(v: str):
     return [x.strip() for x in v.split(",") if x.strip()]
 
 
+IGNORE_V6 = os.environ.get("IGNORE_IPV6", "1") != "0"  # test like hotio: IPv4 only
+
+
 class TunnelError(Exception):
     pass
 
@@ -101,9 +104,12 @@ class Tunnel:
         else:
             raise TunnelError("namespace setup timed out")
 
+        allowed = csv(peer.get("allowedips", "0.0.0.0/0, ::/0"))
+        if IGNORE_V6:
+            allowed = [a for a in allowed if ":" not in a] or ["0.0.0.0/0"]
         wgconf = f"[Interface]\nPrivateKey = {iface['privatekey']}\n[Peer]\n" \
                  f"PublicKey = {peer['publickey']}\nEndpoint = {endpoint}\n" \
-                 f"AllowedIPs = {peer.get('allowedips', '0.0.0.0/0, ::/0')}\n"
+                 f"AllowedIPs = {', '.join(allowed)}\n"
         if "presharedkey" in peer:
             wgconf += f"PresharedKey = {peer['presharedkey']}\n"
         if "persistentkeepalive" in peer:
@@ -118,25 +124,41 @@ class Tunnel:
         has_v6 = False
         for addr in csv(iface.get("address", "")):
             v6 = ":" in addr
+            if v6 and IGNORE_V6:
+                continue
             has_v6 |= v6
             await self.ns("ip", "addr", "add", addr, "dev", self.ifname, check=not v6)
         await self.ns("ip", "link", "set", "lo", "up")
         await self.ns("ip", "link", "set", self.ifname, "mtu", iface.get("mtu", "1420"), "up")
-        for net in csv(peer.get("allowedips", "0.0.0.0/0, ::/0")):
+        for net in allowed:
             if ":" in net and not has_v6:
                 continue
             await self.ns("ip", "route", "add", net, "dev", self.ifname, check=False)
 
-    async def wait_handshake(self, timeout=10):
+    async def wait_handshake(self, timeout=12):
+        """Trigger a handshake with background pings and poll the counter every 50 ms, so
+        the time is the real handshake time (WireGuard retries after 5 s if a packet is lost)."""
         t0 = time.monotonic()
-        while time.monotonic() - t0 < timeout:
-            await self.ns("ping", "-c", "1", "-W", "1", "1.1.1.1", check=False)
-            _, out = await self.ns("wg", "show", self.ifname, "latest-handshakes")
-            parts = out.split()
-            if len(parts) == 2 and parts[1] != "0":
-                self.handshake_s = time.monotonic() - t0
-                return self.handshake_s
+        pinger = asyncio.ensure_future(
+            self.ns("ping", "-c", str(timeout), "-i", "0.5", "-W", "1", "1.1.1.1", check=False))
+        try:
+            while time.monotonic() - t0 < timeout:
+                _, out = await self.ns("wg", "show", self.ifname, "latest-handshakes")
+                parts = out.split()
+                if len(parts) == 2 and parts[1] != "0":
+                    self.handshake_s = time.monotonic() - t0
+                    return self.handshake_s
+                await asyncio.sleep(0.05)
+        finally:
+            pinger.cancel()
         raise TunnelError(f"no handshake within {timeout}s (endpoint down / key rejected?)")
+
+    async def wg_stats(self):
+        """Bytes received/sent through the tunnel: tx>0 with rx==0 means the server accepted
+        the handshake but never answers (dead exit)."""
+        _, out = await self.ns("wg", "show", self.ifname, "transfer", check=False)
+        parts = out.split()
+        return {"rx": int(parts[1]), "tx": int(parts[2])} if len(parts) >= 3 else {"rx": 0, "tx": 0}
 
     async def mtu_ok(self, payload=1392):
         rc, _ = await self.ns("ping", "-c", "2", "-W", "2", "-M", "do", "-s", str(payload),
