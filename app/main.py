@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import configs as cfg
-from . import db, runner, scoring, version
+from . import db, history, runner, scoring, version
 
 app = FastAPI(title="VPN Benchmark")
 STATIC = Path(__file__).with_name("static")
@@ -132,6 +132,12 @@ def delete_result(run_id: int, name: str):
     if not db.delete_result(run_id, name):
         raise HTTPException(404)
     return {"ok": True}
+
+
+@app.get("/api/history")
+def get_history():
+    runs = [db.get_run(r["id"]) for r in reversed(db.list_runs())]
+    return history.build([r for r in runs if r], db.get_setting("weights", scoring.DEFAULT_WEIGHTS))
 
 
 @app.get("/api/runs/{run_id}/log")
