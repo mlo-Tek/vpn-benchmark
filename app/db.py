@@ -8,9 +8,19 @@ DATA = Path(os.environ.get("DATA_DIR", "/data"))
 CONFIGS = Path(os.environ.get("CONFIG_DIR", "/configs"))
 
 
+def _own(path):
+    """The container runs as root (network namespaces need it), but files in /data
+    should belong to PUID/PGID (Unraid: 99/100 = nobody:users)."""
+    uid, gid = os.environ.get("PUID"), os.environ.get("PGID")
+    if uid and gid and os.path.exists(path):
+        os.chown(path, int(uid), int(gid))
+
+
 def conn():
     DATA.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DATA / "results.db")
+    _own(DATA)
+    _own(DATA / "results.db")
     c.row_factory = sqlite3.Row
     c.executescript("""
         CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY, started REAL, mode TEXT,
