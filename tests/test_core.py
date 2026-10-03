@@ -87,3 +87,35 @@ def test_upload_validation_and_safety(tmp_path, monkeypatch):
     assert d["endpoint"] == "de-fra.example.net:51820" and "privatekey" not in str(d).lower()
     assert configs.delete("CryptoStorm/cs-x") and not (tmp_path / "CryptoStorm").exists()
     assert not configs.delete("../../etc/passwd")
+
+
+def test_targets_yaml_norway(tmp_path, monkeypatch):
+    from app import db, runner
+    monkeypatch.setattr(db, "DATA", tmp_path)
+    (tmp_path / "targets.yaml").write_text("targets:\n  NO:\n    - a.no\n  DE:\n    - b.de\n")
+    assert {t["country"] for t in runner.load_targets()} == {"NO", "DE"}
+    monkeypatch.setattr(db, "DATA", tmp_path / "none")
+    assert "NO" in {t["country"] for t in runner.load_targets()}  # bundled file
+
+
+def test_pause_gate():
+    import asyncio
+    from app import runner
+    async def go():
+        runner.STATE["running"] = True
+        runner.pause()
+        waiter = asyncio.create_task(runner.GATE.wait())
+        await asyncio.sleep(0.05)
+        assert not waiter.done() and runner.STATE["paused"]
+        runner.resume()
+        await asyncio.wait_for(waiter, 1)
+        runner.STATE["running"] = False
+    asyncio.run(go())
+
+
+def test_missing_binary_is_a_tunnel_error():
+    import asyncio
+    from app.netns import TunnelError, run
+    assert asyncio.run(run("definitely-not-a-binary", check=False)) == (127, "")
+    with pytest.raises(TunnelError):
+        asyncio.run(run("definitely-not-a-binary"))

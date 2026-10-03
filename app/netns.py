@@ -44,9 +44,14 @@ class TunnelError(Exception):
 
 
 async def run(*cmd, check=True, stdin=None):
-    p = await asyncio.create_subprocess_exec(
-        *cmd, stdin=asyncio.subprocess.PIPE if stdin is not None else None,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        p = await asyncio.create_subprocess_exec(
+            *cmd, stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    except FileNotFoundError:
+        if check:
+            raise TunnelError(f"command not found: {cmd[0]}")
+        return 127, ""
     out, err = await p.communicate(stdin.encode() if stdin is not None else None)
     if check and p.returncode:
         raise TunnelError(f"{' '.join(cmd[:4])}: {err.decode().strip() or out.decode().strip()}")
