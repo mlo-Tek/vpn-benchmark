@@ -18,9 +18,38 @@ def cid(path: Path) -> str:
     return str(path.relative_to(db.CONFIGS).with_suffix(""))
 
 
+# registrable domain of the endpoint -> provider name
+KNOWN = {
+    "cstorm.is": "CryptoStorm", "cryptostorm.is": "CryptoStorm", "cryptostorm.org": "CryptoStorm",
+    "windscribe.com": "Windscribe", "whiskergalaxy.com": "Windscribe",
+    "mullvad.net": "Mullvad", "protonvpn.net": "ProtonVPN", "protonvpn.com": "ProtonVPN",
+    "ivpn.net": "IVPN", "airvpn.org": "AirVPN", "nordvpn.com": "NordVPN", "nordcdn.com": "NordVPN",
+    "privacy.network": "PIA", "privateinternetaccess.com": "PIA", "surfshark.com": "Surfshark",
+    "expressvpn.com": "ExpressVPN", "perfect-privacy.com": "Perfect Privacy",
+    "torguard.net": "TorGuard", "ovpn.com": "OVPN", "azirevpn.com": "AzireVPN",
+}
+
+
+def detect_provider(endpoint_host: str) -> str:
+    """Provider from the endpoint's domain; unknown domains are shown as the domain itself."""
+    host = endpoint_host.strip().lower().rstrip(".")
+    if not host or host.replace(".", "").replace(":", "").isdigit() or ":" in host:
+        return "Unbekannt"  # bare IP address
+    labels = host.split(".")
+    domain = ".".join(labels[-2:])
+    return KNOWN.get(domain) or KNOWN.get(host) or domain
+
+
 def provider(path: Path) -> str:
+    """A sub-folder name wins (you organised it), otherwise it is read from the config."""
     parts = path.relative_to(db.CONFIGS).parts
-    return parts[0] if len(parts) > 1 else "(root)"
+    if len(parts) > 1:
+        return parts[0]
+    try:
+        host, _ = split_endpoint(parse_conf(path.read_text())["peer"]["endpoint"])
+        return detect_provider(host)
+    except Exception:  # noqa: BLE001
+        return "Unbekannt"
 
 
 def list_paths():

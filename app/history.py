@@ -17,6 +17,7 @@ def build(runs, weights):
             err = r.get("error")
             out.setdefault(r["name"], []).append({
                 "run": run["id"], "t": run["started"], "mode": run["mode"],
+                "provider": r.get("provider"),
                 "error": err,
                 "score": scoring.score(r, weights, base)["total"],
                 "avg_rtt": None if err else _avg([m["median"] for m in (r.get("matrix") or {}).values()]),

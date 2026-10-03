@@ -70,7 +70,7 @@ def test_subfolders_are_providers(tmp_path, monkeypatch):
     assert len(found) == 3
     assert {runner.cid(p) for p in found} == {
         "CryptoStorm/cs-poland", "Windscribe/cs-poland", "top"}
-    assert {runner.provider(p) for p in found} == {"CryptoStorm", "Windscribe", "(root)"}
+    assert {runner.provider(p) for p in found} == {"CryptoStorm", "Windscribe", "example.net"}  # loose file: detected from its endpoint
 
 
 def test_upload_validation_and_safety(tmp_path, monkeypatch):
@@ -148,3 +148,18 @@ def test_history_build_orders_and_scores():
     assert [e["run"] for e in h] == [1, 2, 3]
     assert h[1]["score"] == 0.0 and h[1]["error"] == "dead" and h[1]["avg_rtt"] is None
     assert h[0]["score"] > h[2]["score"] > 0
+
+
+def test_provider_detected_from_endpoint(tmp_path, monkeypatch):
+    from app import configs, db
+    monkeypatch.setattr(db, "CONFIGS", tmp_path)
+    mk = lambda name, ep: (tmp_path / name).write_text(CONF.replace("de-fra.example.net:51820", ep))  # noqa: E731
+    mk("a.conf", "berlin.cstorm.is:443")
+    mk("b.conf", "ams-466-wg.whiskergalaxy.com:443")
+    mk("c.conf", "1.2.3.4:51820")
+    mk("d.conf", "node.unknownvpn.org:51820")
+    (tmp_path / "Mine").mkdir()
+    mk("Mine/e.conf", "berlin.cstorm.is:443")
+    got = {p.name: configs.provider(p) for p in configs.list_paths()}
+    assert got == {"a.conf": "CryptoStorm", "b.conf": "Windscribe", "c.conf": "Unbekannt",
+                   "d.conf": "unknownvpn.org", "e.conf": "Mine"}

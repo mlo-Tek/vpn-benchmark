@@ -60,7 +60,18 @@
   .steps { display:flex; gap:6px; flex-wrap:wrap; }
   .step { padding:2px 12px; border-radius:99px; background:var(--soft); color:var(--muted); font-size:12px; font-weight:600; } .step.on { background:var(--accent); color:var(--accent-fg); } .step.done { color:var(--good); }
   pre.log { margin:8px 0 0; max-height:200px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,monospace; background:var(--soft); padding:10px; border-radius:8px; }
-  .sticky { position:sticky; top:0; z-index:5; }
+  .split { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:14px; align-items:start; }
+  .side { position:sticky; top:12px; display:grid; gap:14px; } .side .card, .split .card { margin-bottom:0; }
+  .main { display:grid; gap:14px; }
+  @media (max-width:1000px) { .split { grid-template-columns:1fr; } .side { position:static; order:-1; } }
+  .dropbox { border:2px dashed var(--line); border-radius:12px; padding:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; transition:.15s; background:var(--panel); }
+  .dropbox.over { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); }
+  .dropbox .ic { font-size:26px; line-height:1; color:var(--accent); }
+  tr.grp td { text-align:left; background:var(--soft); font-weight:600; cursor:pointer; user-select:none; padding:6px 10px; }
+  tr.grp:hover td { background:var(--soft); }
+  .side select, .side input[type=number] { width:100%; } .side label.f { width:100%; }
+  .big { font-size:26px; font-weight:800; letter-spacing:-.02em; line-height:1.1; }
+  button.btn.block { width:100%; padding:10px 14px; }
   #overlay { position:fixed; inset:0; z-index:20; background:color-mix(in srgb,var(--accent) 22%,rgba(0,0,0,.45)); display:none; align-items:center; justify-content:center; font-size:22px; font-weight:700; color:#fff; pointer-events:none; }
   #overlay.on { display:flex; }
   .banner { padding:8px 12px; border-radius:8px; background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn); font-weight:600; margin-top:10px; }
@@ -121,52 +132,61 @@
 
 <!-- ================= START ================= -->
 <section id="t-start" class="on">
-  <div class="card sticky" id="ctl">
-    <div class="row">
-      <label class="f">Modus
-        <select id="mode">
-          <option value="standard">Standard: Peering + Durchsatz der Top-N</option>
-          <option value="peering">Nur Peering (am schnellsten)</option>
-          <option value="full">Voll: Durchsatz für alle</option>
-        </select></label>
-      <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:70px"></label>
-      <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:70px"></label>
-      <label class="f">Durchsatz <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
-      <span class="spacer"></span>
-      <span><b id="selN">0</b> von <b id="allN">0</b> ausgewählt</span>
-      <button class="btn primary" id="start">Test starten</button>
-      <button class="btn warn" id="pause" hidden>Pause</button>
-      <button class="btn danger" id="stop" hidden>Stopp</button>
-    </div>
-    <div id="liveBox" hidden>
-      <div class="row" style="margin-top:12px">
-        <div class="steps" id="steps"></div><span class="spacer"></span>
-        <b id="pct">0%</b><span class="muted small" id="liveInfo"></span><span class="muted small" id="elapsed"></span>
-      </div>
-      <div class="bar big" style="margin-top:6px"><i id="pbar" style="width:0"></i></div>
-      <div class="banner" id="pausedBanner" hidden>Pausiert. Bereits laufende Configs werden noch fertig, neue starten erst nach „Fortsetzen“.</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="row" style="margin-bottom:10px">
-      <input type="search" id="q" placeholder="Suchen: Name, Anbieter, Endpoint …" style="flex:1;min-width:200px">
-      <button class="btn sm" id="selVis">Sichtbare auswählen</button>
-      <button class="btn sm" id="selNone">Keine</button>
-      <button class="btn sm" id="pickFiles">+ Dateien</button>
-      <button class="btn sm" id="pickDir">+ Ordner</button>
-      <input type="text" id="upProv" placeholder="Anbieter für Upload (optional)" style="width:200px">
+ <div class="split">
+  <div class="main">
+    <div class="dropbox" id="dropBox">
+      <span class="ic">⇪</span>
+      <div style="flex:1;min-width:220px"><b>Configs hinzufügen</b>
+        <div class="small muted">.conf-Dateien oder ganze Ordner hierher ziehen (geht auch auf der ganzen Seite). Der Anbieter wird aus dem Endpoint erkannt, ein Ordnername hat Vorrang.</div></div>
+      <button class="btn" id="pickFiles">Dateien wählen</button>
+      <button class="btn" id="pickDir">Ordner wählen</button>
+      <input type="text" id="upProv" placeholder="Anbieter festlegen (optional)" style="width:210px">
       <input type="file" id="fileIn" accept=".conf" multiple hidden>
       <input type="file" id="dirIn" webkitdirectory multiple hidden>
     </div>
-    <div class="row" id="provChips" style="margin-bottom:10px"></div>
-    <div class="scroll"><table id="cfgTbl"></table></div>
-    <div class="small muted" style="margin-top:8px">Tipp: .conf-Dateien oder Ordner einfach irgendwo auf die Seite ziehen. Der Ordnername wird zum Anbieter.</div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <input type="search" id="q" placeholder="Suchen: Name, Anbieter, Endpoint …" style="flex:1;min-width:180px">
+        <button class="btn sm" id="selVis">Sichtbare auswählen</button>
+        <button class="btn sm" id="selNone">Keine</button>
+      </div>
+      <div class="row" id="provChips" style="margin-bottom:8px"></div>
+      <div class="scroll"><table id="cfgTbl"></table></div>
+    </div>
   </div>
 
-  <div class="card" id="logCard" hidden>
-    <details><summary class="muted">Log</summary><pre class="log" id="log"></pre></details>
-  </div>
+  <aside class="side">
+    <div class="card" id="ctl">
+      <h2>Test</h2>
+      <div class="big"><span id="selN">0</span> <span class="muted" style="font-size:15px;font-weight:600">von <span id="allN">0</span> Configs ausgewählt</span></div>
+      <div style="display:grid;gap:10px;margin-top:12px">
+        <label class="f">Modus
+          <select id="mode">
+            <option value="standard">Standard: Peering + Durchsatz der Top-N</option>
+            <option value="peering">Nur Peering (am schnellsten)</option>
+            <option value="full">Voll: Durchsatz für alle</option>
+          </select></label>
+        <div class="row" style="flex-wrap:nowrap">
+          <label class="f" style="flex:1">Parallel <input id="parallel" type="number" value="8" min="1" max="32"></label>
+          <label class="f" style="flex:1">Top-N <input id="topn" type="number" value="10" min="1"></label>
+        </div>
+        <label class="f">Durchsatz-Messung <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
+        <button class="btn primary block" id="start">Test starten</button>
+        <div class="row" style="flex-wrap:nowrap"><button class="btn warn block" id="pause" hidden>Pause</button><button class="btn danger block" id="stop" hidden>Stopp</button></div>
+      </div>
+      <div id="liveBox" hidden style="margin-top:14px">
+        <div class="steps" id="steps"></div>
+        <div class="row" style="margin:10px 0 6px"><b id="pct" style="font-size:18px">0%</b><span class="spacer"></span><span class="muted small" id="liveInfo"></span></div>
+        <div class="bar big"><i id="pbar" style="width:0"></i></div>
+        <div class="muted small" id="elapsed" style="margin-top:6px"></div>
+        <div class="banner" id="pausedBanner" hidden>Pausiert. Laufende Configs werden noch fertig, neue starten nach „Fortsetzen“.</div>
+      </div>
+    </div>
+    <div class="card" id="logCard" hidden>
+      <details><summary class="muted">Log</summary><pre class="log" id="log"></pre></details>
+    </div>
+  </aside>
+ </div>
 </section>
 
 <!-- ================= RESULTS ================= -->
@@ -221,7 +241,8 @@ const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? 
 const toast = m => { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 3500); };
 const dur = s => s == null ? "–" : s < 60 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
 const avg = (a, f) => { const v = a.map(f).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((x, y) => x + y) / v.length : null; };
-const provOf = n => n.includes("/") ? n.split("/")[0] : "(root)";
+const provMap = {};
+const provOf = n => provMap[n] || (n.includes("/") ? n.split("/")[0] : "Unbekannt");
 const shortName = n => n.includes("/") ? n.split("/").slice(1).join("/") : n;
 const pcolor = (() => { const m = {}; return p => m[p] ||= `hsl(${(Object.keys(m).length * 67 + 215) % 360} 65% 55%)`; })();
 const scoreColor = v => v >= 80 ? "var(--good)" : v >= 60 ? "var(--accent)" : v >= 40 ? "var(--warn)" : "var(--bad)";
@@ -241,6 +262,7 @@ const resultOf = id => current && status.running && current.id === status.run_id
 /* ---------- start page: config table with live columns ---------- */
 async function loadConfigs() {
   configs = await api("/api/configs");
+  configs.forEach(c => provMap[c.id] = c.provider);
   for (const id of [...selected]) if (!configs.find(c => c.id === id)) selected.delete(id);
   $("allN").textContent = configs.length;
   renderChips(); renderConfigs(); saveSel();
@@ -259,28 +281,41 @@ function visible() {
   return configs.filter(c => (!provFilter.size || provFilter.has(c.provider)) && (!q || `${c.id} ${c.endpoint || ""}`.toLowerCase().includes(q)));
 }
 const STATUS = { queued: ["wartet", ""], connecting: ["verbindet", "run"], peering: ["misst", "run"], "peering done": ["Peering fertig", "ok"], throughput: ["Durchsatz", "run"], done: ["fertig", "ok"], failed: ["Fehler", "bad"], "throughput failed": ["Durchsatz-Fehler", "warn"], cancelled: ["abgebrochen", "bad"] };
+const collapsed = new Set();
 function renderConfigs() {
   const vis = visible(), live = Object.keys(status.items).length > 0;
-  if (!configs.length) { $("cfgTbl").innerHTML = `<tr><td class="empty">Noch keine Configs. Zieh .conf-Dateien oder einen Ordner auf diese Seite.</td></tr>`; return; }
-  const allSel = vis.length && vis.every(c => selected.has(c.id));
-  $("cfgTbl").innerHTML = `<thead><tr><th class="l" style="width:30px"><input type="checkbox" id="chkAll" ${allSel ? "checked" : ""}></th><th class="l">Name</th><th class="l">Anbieter</th><th class="l">Endpoint</th>` +
-    (live ? `<th class="l">Status</th><th>Dauer</th><th>Score</th><th>Ø ms</th>` : "") + `<th></th></tr></thead><tbody>` +
-    vis.map(c => {
+  if (!configs.length) { $("cfgTbl").innerHTML = `<tr><td class="empty">Noch keine Configs. Ziehe .conf-Dateien oder einen Ordner auf diese Seite oder nutze „Dateien wählen“ oben.</td></tr>`; return; }
+  if (!vis.length) { $("cfgTbl").innerHTML = `<tr><td class="empty">Keine Treffer.</td></tr>`; return; }
+  const groups = {}; vis.forEach(c => (groups[c.provider] ||= []).push(c));
+  const cols = live ? 8 : 4;
+  let h = `<thead><tr><th class="l" style="width:30px"></th><th class="l">Name</th><th class="l">Endpoint</th>` +
+    (live ? `<th class="l">Status</th><th>Dauer</th><th>Score</th><th>Ø ms</th>` : "") + `<th></th></tr></thead><tbody>`;
+  for (const [prov, list] of Object.entries(groups).sort()) {
+    const nSel = list.filter(c => selected.has(c.id)).length, shut = collapsed.has(prov);
+    h += `<tr class="grp" data-grp="${esc(prov)}"><td><input type="checkbox" data-gc="${esc(prov)}" ${nSel === list.length ? "checked" : ""} ${nSel && nSel < list.length ? 'data-part="1"' : ""}></td>
+      <td colspan="${cols}"><span class="muted">${shut ? "▸" : "▾"}</span> <span style="color:${pcolor(prov)}">●</span> ${esc(prov)} <span class="muted small" style="font-weight:400">· ${list.length} Configs · ${nSel} ausgewählt</span></td></tr>`;
+    if (shut) continue;
+    for (const c of list) {
       const it = status.items[c.id], r = resultOf(c.id), [txt, cls] = it ? (STATUS[it.status] || [it.status, "run"]) : ["", ""];
       const d = it && it.t0 ? ((it.t1 || Date.now() / 1000) - it.t0) : null;
       const am = r && !r.error ? avg(Object.values(r.matrix || {}), m => m.median) : null;
-      return `<tr><td class="l"><input type="checkbox" data-id="${esc(c.id)}" ${selected.has(c.id) ? "checked" : ""}></td>
-        <td class="l"><b>${esc(c.name)}</b>${c.valid ? "" : ` <span class="chip bad" title="${esc(c.error)}">ungültig</span>`}</td>
-        <td class="l"><span style="color:${pcolor(c.provider)}">●</span> ${esc(c.provider)}</td><td class="l muted">${esc(c.endpoint || "")}</td>` +
+      h += `<tr><td class="l"><input type="checkbox" data-id="${esc(c.id)}" ${selected.has(c.id) ? "checked" : ""}></td>
+        <td class="l"><b>${esc(c.name)}</b>${c.valid ? "" : ` <span class="chip bad" title="${esc(c.error)}">ungültig</span>`}</td><td class="l muted">${esc(c.endpoint || "")}</td>` +
         (live ? `<td class="l">${it ? `<span class="chip ${cls}">${txt}</span> <span class="muted small">${esc(it.status === "done" || it.status === "peering done" ? "" : it.stage || "")}</span>` : '<span class="muted">–</span>'}</td>
           <td>${d != null ? dur(d) : "–"}</td><td>${r && !r.error ? `<b style="color:${scoreColor(r.score.total)}">${fmt(r.score.total, 1)}</b>` : "–"}</td><td>${fmt(am)}</td>` : "") +
-        `<td><button class="btn sm danger" data-del="${esc(c.id)}" ${status.running ? "disabled" : ""}>Löschen</button></td></tr>`; }).join("") + "</tbody>";
-  $("chkAll").onchange = e => { vis.forEach(c => e.target.checked ? selected.add(c.id) : selected.delete(c.id)); renderConfigs(); saveSel(); };
+        `<td><button class="btn sm danger" data-del="${esc(c.id)}" ${status.running ? "disabled" : ""}>Löschen</button></td></tr>`;
+    }
+  }
+  $("cfgTbl").innerHTML = h + "</tbody>";
+  $("cfgTbl").querySelectorAll("input[data-part]").forEach(i => i.indeterminate = true);
 }
 $("cfgTbl").onclick = async e => {
-  const cb = e.target.closest("input[data-id]"); if (cb) { cb.checked ? selected.add(cb.dataset.id) : selected.delete(cb.dataset.id); saveSel(); return; }
+  const gc = e.target.closest("input[data-gc]");
+  if (gc) { visible().filter(c => c.provider === gc.dataset.gc).forEach(c => gc.checked ? selected.add(c.id) : selected.delete(c.id)); renderConfigs(); saveSel(); return; }
+  const cb = e.target.closest("input[data-id]"); if (cb) { cb.checked ? selected.add(cb.dataset.id) : selected.delete(cb.dataset.id); saveSel(); renderConfigs(); return; }
   const d = e.target.closest("button[data-del]");
-  if (d && confirm(`„${d.dataset.del}“ wirklich löschen?`)) { try { await api("/api/configs?id=" + encodeURIComponent(d.dataset.del), { method: "DELETE" }); selected.delete(d.dataset.del); loadConfigs(); } catch (er) { toast(er.message); } }
+  if (d) { if (confirm(`„${d.dataset.del}“ wirklich löschen?`)) { try { await api("/api/configs?id=" + encodeURIComponent(d.dataset.del), { method: "DELETE" }); selected.delete(d.dataset.del); loadConfigs(); } catch (er) { toast(er.message); } } return; }
+  const g = e.target.closest("tr[data-grp]"); if (g) { const k = g.dataset.grp; collapsed.has(k) ? collapsed.delete(k) : collapsed.add(k); renderConfigs(); }
 };
 $("q").oninput = renderConfigs;
 $("selVis").onclick = () => { visible().forEach(c => selected.add(c.id)); renderConfigs(); saveSel(); };
@@ -299,11 +334,11 @@ async function upload(files) {
 $("pickFiles").onclick = () => $("fileIn").click(); $("pickDir").onclick = () => $("dirIn").click();
 $("fileIn").onchange = e => { upload(e.target.files); e.target.value = ""; }; $("dirIn").onchange = e => { upload(e.target.files); e.target.value = ""; };
 let dragN = 0; const ov = $("overlay");
-addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragN++; ov.classList.add("on"); } });
-addEventListener("dragleave", () => { if (--dragN <= 0) { dragN = 0; ov.classList.remove("on"); } });
+addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragN++; ov.classList.add("on"); $("dropBox").classList.add("over"); } });
+addEventListener("dragleave", () => { if (--dragN <= 0) { dragN = 0; ov.classList.remove("on"); $("dropBox").classList.remove("over"); } });
 addEventListener("dragover", e => e.preventDefault());
 addEventListener("drop", async e => {
-  e.preventDefault(); dragN = 0; ov.classList.remove("on"); showTab("start");
+  e.preventDefault(); dragN = 0; ov.classList.remove("on"); $("dropBox").classList.remove("over"); showTab("start");
   const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean), out = [];
   const walk = async (en, path) => {
     if (en.isFile) await new Promise(res => en.file(f => { out.push(new File([f], path + f.name)); res(); }));
@@ -356,7 +391,7 @@ async function loadRuns(select) {
   sel.value = select === true || !runs.find(r => String(r.id) === keep) ? runs[0].id : keep;
   await loadRun(sel.value);
 }
-async function loadRun(id) { current = await api("/api/runs/" + id); renderResults(); }
+async function loadRun(id) { current = await api("/api/runs/" + id); current.results.forEach(r => r.provider && (provMap[r.name] = r.provider)); renderResults(); }
 $("runs").onchange = e => loadRun(e.target.value);
 $("delRun").onclick = async () => {
   if (!current || !confirm(`Lauf #${current.id} mit allen ${current.results.length} Ergebnissen und dem Log endgültig löschen?`)) return;
@@ -490,7 +525,7 @@ function spark(vals, w = 110, h = 28, color = "var(--accent)") {
   return `<svg width="${w}" height="${h}" style="vertical-align:middle"><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>` +
     v.map((y, i) => y == null ? "" : `<circle cx="${X(i).toFixed(1)}" cy="${Y(y).toFixed(1)}" r="2.4" fill="${color}" style="stroke:none;cursor:default"/>`).join("") + `</svg>`;
 }
-async function loadHistory() { try { hist = await api("/api/history"); } catch { return; } renderHistory(); }
+async function loadHistory() { try { hist = await api("/api/history"); } catch { return; } Object.entries(hist).forEach(([n, e]) => { const p = [...e].reverse().find(x => x.provider)?.provider; if (p) provMap[n] = p; }); renderHistory(); }
 function histRows() {
   return Object.entries(hist).map(([name, e]) => {
     const okE = e.filter(x => !x.error), sc = e.map(x => x.score);
