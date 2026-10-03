@@ -119,3 +119,16 @@ def test_missing_binary_is_a_tunnel_error():
     assert asyncio.run(run("definitely-not-a-binary", check=False)) == (127, "")
     with pytest.raises(TunnelError):
         asyncio.run(run("definitely-not-a-binary"))
+
+
+def test_delete_run_and_result(tmp_path, monkeypatch):
+    from app import db
+    monkeypatch.setattr(db, "DATA", tmp_path)
+    a, b = db.new_run("peering"), db.new_run("peering")
+    for rid in (a, b):
+        db.save_result(rid, "x/one", {"swarm": {}})
+        db.save_result(rid, "x/two", {"swarm": {}})
+    assert db.delete_result(a, "x/one") and not db.delete_result(a, "x/one")
+    assert {r["name"] for r in db.get_run(a)["results"]} == {"x/two"}
+    assert db.delete_run(a) and db.get_run(a) is None
+    assert len(db.get_run(b)["results"]) == 2  # other run untouched

@@ -173,6 +173,7 @@
   <div class="row" style="margin-bottom:12px">
     <select id="runs" style="min-width:300px"></select>
     <a class="btn sm" id="csv" href="#">CSV</a>
+    <button class="btn sm danger" id="delRun">Lauf löschen</button>
     <span class="spacer"></span><span class="muted small" id="baseInfo"></span>
   </div>
   <div id="resBody"><div class="card empty">Noch keine Ergebnisse.</div></div>
@@ -345,6 +346,10 @@ async function loadRuns(select) {
 }
 async function loadRun(id) { current = await api("/api/runs/" + id); renderResults(); }
 $("runs").onchange = e => loadRun(e.target.value);
+$("delRun").onclick = async () => {
+  if (!current || !confirm(`Lauf #${current.id} mit allen ${current.results.length} Ergebnissen und dem Log endgültig löschen?`)) return;
+  try { await api("/api/runs/" + current.id, { method: "DELETE" }); toast(`Lauf #${current.id} gelöscht`); await loadRuns(true); } catch (e) { toast(e.message); }
+};
 
 const colorRtt = v => v == null ? "" : `background:hsl(${125 - 125 * Math.max(0, Math.min(1, (v - 10) / 110))} 60% 45% / .3)`;
 const best = (arr, f, dir = 1) => arr.filter(r => f(r) != null).sort((a, b) => dir * (f(a) - f(b)))[0];
@@ -453,7 +458,12 @@ function detail(name) {
     Object.entries(r.matrix || {}).sort().map(([c, m]) => `<tr><td class="l">${c}</td><td style="${colorRtt(m.median)}">${fmt(m.median)}</td><td>${fmt(m.loss * 100)}%</td><td class="l muted small">${Object.entries(m.targets).map(([h, t]) => `${esc(h.replace(/^www\./, ""))} ${fmt(t.median)}`).join(" · ")}</td></tr>`).join("") + `</tbody></table></div>`;
   if ((r.events || []).length) h += `<h3 style="margin:16px 0 6px;font-size:13px">Diagnose</h3><div class="scroll"><table><tbody>` +
     r.events.map(x => `<tr><td class="muted" style="width:60px">${fmt(x.t, 1)} s</td><td class="l" style="white-space:normal">${esc(x.msg)}</td></tr>`).join("") + `</tbody></table></div>`;
+  h += `<div class="row" style="margin-top:14px"><button class="btn sm danger" id="delRes">Dieses Ergebnis löschen</button><span class="muted small">nur aus Lauf #${current.id}, die Config selbst bleibt</span></div>`;
   $("dlgBody").innerHTML = h; $("dlg").showModal();
+  $("delRes").onclick = async () => {
+    if (!confirm(`Ergebnis „${r.name}“ aus Lauf #${current.id} löschen?`)) return;
+    try { await api(`/api/runs/${current.id}/results?name=` + encodeURIComponent(r.name), { method: "DELETE" }); $("dlg").close(); toast("Ergebnis gelöscht"); await loadRun(current.id); } catch (e) { toast(e.message); }
+  };
 }
 $("dlgClose").onclick = () => $("dlg").close();
 
