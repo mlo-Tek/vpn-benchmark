@@ -22,6 +22,7 @@ class RunRequest(BaseModel):
     selected: list[str] | None = None
     providers: list[str] | None = None
     tp_runs: int = 1  # throughput repeats per direction (median)
+    regions: bool = True  # iPerf3 down/up per peer country (throughput phase)
 
 
 class Settings(BaseModel):
@@ -71,7 +72,7 @@ async def start(req: RunRequest):
     if req.mode not in ("peering", "standard", "full"):
         raise HTTPException(400, "bad mode")
     runner.start(req.mode, max(1, min(req.parallel, 32)), max(1, req.topn),
-                 req.selected, req.providers, max(1, min(req.tp_runs, 5)))
+                 req.selected, req.providers, max(1, min(req.tp_runs, 5)), req.regions)
     return {"started": True}
 
 
@@ -157,8 +158,10 @@ def run_csv(run_id: int):
     countries = sorted({cc for r in run["results"] for cc in r.get("matrix", {})})
     out = io.StringIO()
     w = csv.writer(out)
+    reg = lambda r, c, k: ((r.get("throughput") or {}).get("regions") or {}).get(c, {}).get(k)  # noqa: E731
     w.writerow(["config", "score", "exit_ip", "exit_country", "handshake_s", "swarm_success",
-                "dl_mbps", "ul_mbps", "error"] + [f"rtt_{c}_ms" for c in countries])
+                "dl_mbps", "ul_mbps", "error"] + [f"rtt_{c}_ms" for c in countries]
+               + [f"{d}_{c}_mbps" for c in countries for d in ("down", "up")])
     for r in run["results"]:
         tp = r.get("throughput") or {}
         w.writerow([r["name"], r["score"]["total"], (r.get("exit") or {}).get("ip"),
@@ -166,7 +169,8 @@ def run_csv(run_id: int):
                     (r.get("swarm") or {}).get("success"),
                     (tp.get("dl") or {}).get("mbps"), (tp.get("ul") or {}).get("mbps"),
                     r.get("error")] +
-                   [(r.get("matrix", {}).get(c) or {}).get("median") for c in countries])
+                   [(r.get("matrix", {}).get(c) or {}).get("median") for c in countries] +
+                   [reg(r, c, d) for c in countries for d in ("down", "up")])
     return PlainTextResponse(out.getvalue(), media_type="text/csv")
 
 

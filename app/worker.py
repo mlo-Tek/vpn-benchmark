@@ -5,6 +5,7 @@ Pure stdlib so it can be started via `nsenter` without any extra setup.
 """
 import asyncio
 import json
+import random
 import socket
 import ssl
 import statistics
@@ -235,7 +236,96 @@ async def throughput(args):
     return out
 
 
-COMMANDS = {"matrix": matrix, "swarm": swarm, "info": info, "throughput": throughput}
+IPERF_OUTLIER_MBPS = 20.0  # below this a result is re-measured and the median is used
+
+
+def iperf_mbps(data, reverse):
+    """Mbit/s out of an `iperf3 -J` document (reverse = download = what the client received)."""
+    end = data.get("end", {})
+    bucket = end.get("sum_received" if reverse else "sum_sent", {})
+    bps = (bucket.get("bits_per_second") or end.get("sum_received", {}).get("bits_per_second")
+           or end.get("sum_sent", {}).get("bits_per_second"))
+    return round(float(bps) / 1e6, 2) if bps else None
+
+
+async def open_ports(host, ports, timeout=2.0):
+    """Public servers often run only a few ports of a big range: find the open ones first."""
+    async def one(p):
+        try:
+            _, w = await asyncio.wait_for(asyncio.open_connection(host, p), timeout)
+            w.close()
+            return p
+        except Exception:  # noqa: BLE001
+            return None
+    return [p for p in await asyncio.gather(*(one(p) for p in ports)) if p]
+
+
+async def iperf_once(host, ports, reverse, parallel, duration, tries=3):
+    ports = list(ports)
+    if len(ports) > 4:
+        ports = await open_ports(host, ports) or ports
+    random.shuffle(ports)
+    errors = []
+    for port in ports[:tries]:
+        cmd = ["iperf3", "-c", host, "-4", "-p", str(port), "--connect-timeout", "4000",
+               "-P", str(parallel), "-t", str(duration), "-J"] + (["-R"] if reverse else [])
+        try:
+            p = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        except FileNotFoundError:
+            return {"ok": False, "error": "iperf3 ist nicht installiert"}
+        try:
+            out, _ = await asyncio.wait_for(p.communicate(), duration + 12)
+        except asyncio.TimeoutError:
+            p.kill()
+            errors.append(f"{port}: Timeout")
+            continue
+        try:
+            data = json.loads(out)
+        except Exception:  # noqa: BLE001
+            errors.append(f"{port}: keine Antwort")
+            continue
+        if data.get("error"):
+            errors.append(f"{port}: {str(data['error'])[:70]}")
+            continue
+        mbps = iperf_mbps(data, reverse)
+        if mbps is None:
+            errors.append(f"{port}: keine Bitrate")
+            continue
+        return {"ok": True, "mbps": mbps, "host": host, "port": port}
+    return {"ok": False, "error": " | ".join(errors[-2:]) or "kein Port erreichbar"}
+
+
+async def iperf_stable(host, ports, reverse, parallel, duration):
+    """A suspiciously low single result is measured twice more; the median counts."""
+    first = await iperf_once(host, ports, reverse, parallel, duration)
+    if not first["ok"] or first["mbps"] >= IPERF_OUTLIER_MBPS:
+        return first
+    samples = [first] + [await iperf_once(host, ports, reverse, parallel, duration) for _ in range(2)]
+    vals = [x["mbps"] for x in samples if x["ok"]]
+    return {**first, "mbps": statistics.median(vals), "rechecked": True,
+            "samples": [x.get("mbps") for x in samples]}
+
+
+async def region(args):
+    """Download and upload to one country, using the first of its public servers that answers."""
+    out = {"country": args["country"]}
+    for key, reverse in (("down", True), ("up", False)):
+        last = None
+        for srv in args["servers"]:
+            last = await iperf_stable(srv["host"], srv["ports"], reverse,
+                                      args.get("parallel", 4), args.get("duration", 3))
+            if last["ok"]:
+                out[key], out[key + "_server"] = last["mbps"], srv["host"]
+                if last.get("rechecked"):
+                    out[key + "_samples"] = last["samples"]
+                break
+        else:
+            out[key], out[key + "_error"] = None, (last or {}).get("error", "kein Server")
+    return out
+
+
+COMMANDS = {"region": region, "matrix": matrix, "swarm": swarm, "info": info, "throughput": throughput}
 
 if __name__ == "__main__":
     payload = json.loads(sys.stdin.read() or "{}")

@@ -173,3 +173,41 @@ def test_throughput_median_ignores_collapsed_runs():
     r = aggregate([{"mbps": 400, "stability": 1}, {"mbps": 450, "stability": 1}, {"mbps": 420, "stability": 1}])
     assert r["mbps"] == 420 and r["excluded"] == 0  # normal case: plain median
     assert aggregate([{"mbps": 0.0, "stability": 0}])["mbps"] == 0.0  # dead tunnel stays 0
+
+
+def test_iperf_parsing_and_ports():
+    from app.worker import iperf_mbps
+    from app.runner import parse_ports
+    down = {"end": {"sum_received": {"bits_per_second": 450e6}, "sum_sent": {"bits_per_second": 460e6}}}
+    assert iperf_mbps(down, reverse=True) == 450.0      # download = what the client received
+    assert iperf_mbps(down, reverse=False) == 460.0     # upload = what the client sent
+    assert iperf_mbps({"end": {}}, True) is None
+    assert parse_ports("5200-5203") == [5200, 5201, 5202, 5203] and parse_ports(5201) == [5201]
+
+
+def test_regions_yaml_is_valid_and_has_norway_and_finland():
+    from app import runner
+    r = runner.load_regions()
+    assert {"NO", "FI", "NL", "DE", "SE", "CH", "DK", "PL"} <= set(r)  # NO must not become False
+    assert all(s["ports"] and s["host"] for srv in r.values() for s in srv)
+
+
+def test_region_throughput_changes_score_and_worst_region_counts():
+    from app import scoring
+    def res(dk_up, with_regions=True):
+        m = scoring.country_stats([{"country": c, "host": "x", "median": 20, "loss": 0, "jitter": 0} for c in ("NL", "DK")])
+        r = {"matrix": m, "swarm": {"success": 1.0}, "handshake_s": 0.1, "mtu_ok": True}
+        if with_regions:
+            r["throughput"] = {"dl": {"mbps": 400, "stability": 1.0}, "ul": {"mbps": 180, "stability": 1.0},
+                               "regions": {"NL": {"down": 400, "up": 180}, "DK": {"down": 50, "up": dk_up}}}
+        return r
+    base = {"dl": {"mbps": 450}, "ul": {"mbps": 190}}
+    good, bad = scoring.score(res(180), scoring.DEFAULT_WEIGHTS, base), scoring.score(res(10), scoring.DEFAULT_WEIGHTS, base)
+    assert good["peering"] > bad["peering"] + 10          # a weak country now shows in the score
+    assert scoring.score(res(0, False), scoring.DEFAULT_WEIGHTS, base)["peering"] > 80  # no regions: latency only
+    # an unmeasurable direction (None) is skipped, not counted as 0
+    r = res(180); r["throughput"]["regions"]["DK"]["down"] = None
+    assert scoring.score(r, scoring.DEFAULT_WEIGHTS, base)["peering"] > bad["peering"]
+    # a broken baseline (2 Mbit/s) must not blow up the score: fall back to own measurement
+    s = scoring.score(res(180), scoring.DEFAULT_WEIGHTS, {"dl": {"mbps": 2}, "ul": {"mbps": 2}})
+    assert 0 < s["total"] <= 100
