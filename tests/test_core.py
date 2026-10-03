@@ -163,3 +163,13 @@ def test_provider_detected_from_endpoint(tmp_path, monkeypatch):
     got = {p.name: configs.provider(p) for p in configs.list_paths()}
     assert got == {"a.conf": "CryptoStorm", "b.conf": "Windscribe", "c.conf": "Unbekannt",
                    "d.conf": "unknownvpn.org", "e.conf": "Mine"}
+
+
+def test_throughput_median_ignores_collapsed_runs():
+    """Regression: runs of [188, 1, 1] Mbit/s (rate limited) must not give a 1 Mbit/s median."""
+    from app.worker import aggregate
+    r = aggregate([{"mbps": 188.9, "stability": .9}, {"mbps": 1.0, "stability": 0}, {"mbps": 1.1, "stability": 0}])
+    assert r["mbps"] == 188.9 and r["excluded"] == 2 and r["runs"] == [188.9, 1.0, 1.1]
+    r = aggregate([{"mbps": 400, "stability": 1}, {"mbps": 450, "stability": 1}, {"mbps": 420, "stability": 1}])
+    assert r["mbps"] == 420 and r["excluded"] == 0  # normal case: plain median
+    assert aggregate([{"mbps": 0.0, "stability": 0}])["mbps"] == 0.0  # dead tunnel stays 0

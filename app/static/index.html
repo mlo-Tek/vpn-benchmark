@@ -144,7 +144,7 @@
         </select></label>
       <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:72px"></label>
       <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:72px"></label>
-      <label class="f">Durchsatz-Messung <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
+      <label class="f">Durchsatz-Messung <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau, dauert länger)</option></select></label>
       <span class="spacer"></span>
       <button class="btn primary" id="start" style="padding:10px 28px">Test starten</button>
       <button class="btn warn" id="pause" hidden style="padding:10px 22px">Pause</button>
@@ -497,7 +497,9 @@ function detail(name) {
       <div class="stat"><div class="l">Zuverlässigkeit</div><div class="v">${fmt(s.reliability)}</div></div><div class="stat"><div class="l">Durchsatz</div><div class="v">${s.throughput == null ? "–" : fmt(s.throughput)}</div></div></div></div>
     <div class="small muted" style="margin-bottom:8px">Handshake ${fmt(r.handshake_s, 2)} s · MTU 1420 ${r.mtu_ok ? "ok" : "Fragmentierung"} · IPv6 ${r.ipv6 == null ? "aus (nur IPv4)" : r.ipv6 ? "ja" : "nein"} · DNS ${r.dns_ok ? fmt(r.dns_ms) + " ms" : "Fehler"}</div>${r.throughput ? `<div class="small" style="margin-bottom:8px">↓ <b>${fmt(r.throughput.dl.mbps)}</b> Mbit/s${(r.throughput.dl.runs || []).length > 1 ? ` (Läufe ${r.throughput.dl.runs.map(x => fmt(x)).join(" / ")})` : ""} · Stabilität ${fmt(r.throughput.dl.stability * 100)}%
       &nbsp;|&nbsp; ↑ <b>${fmt(r.throughput.ul.mbps)}</b> Mbit/s${(r.throughput.ul.runs || []).length > 1 ? ` (Läufe ${r.throughput.ul.runs.map(x => fmt(x)).join(" / ")})` : ""} · Stabilität ${fmt(r.throughput.ul.stability * 100)}%
-      <span class="muted">· 100% = gleichmäßig, niedrig = Einbrüche (eine Sekunde ohne Daten)</span></div>` : ""}
+      <span class="muted">· 100% = gleichmäßig, niedrig = Einbrüche (eine Sekunde ohne Daten)</span>
+      ${(r.throughput.dl.excluded || r.throughput.ul.excluded) ? `<div class="banner" style="margin-top:6px">${r.throughput.dl.excluded ? r.throughput.dl.excluded + " Download-Lauf/Läufe ausgeschlossen (eingebrochen, vermutlich vom Server gedrosselt)." : ""} ${r.throughput.ul.excluded ? r.throughput.ul.excluded + " Upload-Lauf/Läufe ausgeschlossen." : ""}</div>` : ""}
+      ${r.throughput.dl.source ? `<div class="muted small" style="margin-top:4px">Download-Quelle: ${esc(r.throughput.dl.source)}</div>` : ""}</div>` : ""}
     <div class="scroll"><table><thead><tr><th class="l">Land</th><th>Median</th><th>Loss</th><th class="l">Ziele (ms)</th></tr></thead><tbody>` +
     Object.entries(r.matrix || {}).sort().map(([c, m]) => `<tr><td class="l">${c}</td><td style="${colorRtt(m.median)}">${fmt(m.median)}</td><td>${fmt(m.loss * 100)}%</td><td class="l muted small">${Object.entries(m.targets).map(([h, t]) => `${esc(h.replace(/^www\./, ""))} ${fmt(t.median)}`).join(" · ")}</td></tr>`).join("") + `</tbody></table></div>`;
   if ((r.events || []).length) h += `<h3 style="margin:16px 0 6px;font-size:13px">Diagnose</h3><div class="scroll"><table><tbody>` +
