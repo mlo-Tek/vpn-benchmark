@@ -1,0 +1,46 @@
+# Probe targets per peer country (TCP connect RTT to port 443).
+# Mix of consumer ISPs, universities/IXP-near networks and national sites, so the
+# result resembles real residential peers. Override by placing your own copy at
+# /data/targets.yaml. Prefer hosts that are NOT behind a global CDN, otherwise you
+# measure the nearest CDN edge instead of the country.
+targets:
+  NO:
+    - www.telenor.no
+    - www.altibox.no
+    - www.uio.no
+    - www.ntnu.no
+  NL:
+    - www.kpn.com
+    - www.ziggo.nl
+    - www.surf.nl
+    - www.tue.nl
+  DE:
+    - www.telekom.de
+    - www.vodafone.de
+    - www.denic.de
+    - www.tu-berlin.de
+  SE:
+    - www.telia.se
+    - www.bahnhof.se
+    - www.kth.se
+    - www.liu.se
+  CH:
+    - www.swisscom.ch
+    - www.sunrise.ch
+    - www.switch.ch
+    - www.ethz.ch
+  FI:
+    - www.elisa.fi
+    - www.dna.fi
+    - www.funet.fi
+    - www.aalto.fi
+  DK:
+    - www.tdc.dk
+    - www.yousee.dk
+    - www.dtu.dk
+    - www.au.dk
+  PL:
+    - www.orange.pl
+    - www.play.pl
+    - www.pw.edu.pl
+    - www.agh.edu.pl

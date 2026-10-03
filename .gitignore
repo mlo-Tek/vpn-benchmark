@@ -1,0 +1,8 @@
+# WireGuard configs contain private keys - never commit them
+*.conf
+configs/
+data/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
