@@ -28,7 +28,18 @@ def load_targets():
 
 
 def list_configs():
-    return sorted(db.CONFIGS.glob("*.conf")) if db.CONFIGS.exists() else []
+    """All *.conf below /configs; sub-folders are treated as providers."""
+    return sorted(db.CONFIGS.rglob("*.conf")) if db.CONFIGS.exists() else []
+
+
+def cid(path):
+    """Unique id: path relative to /configs without .conf (e.g. CryptoStorm/cs-poland)."""
+    return str(path.relative_to(db.CONFIGS).with_suffix(""))
+
+
+def provider(path):
+    parts = path.relative_to(db.CONFIGS).parts
+    return parts[0] if len(parts) > 1 else "(root)"
 
 
 async def host_worker(cmd, args, timeout=60):
@@ -42,7 +53,7 @@ def set_item(name, **kw):
 
 
 async def test_peering(path, idx, targets):
-    name = path.stem
+    name = cid(path)
     set_item(name, status="connecting")
     result = {}
     t = None
@@ -80,16 +91,18 @@ async def test_throughput(path, idx, duration):
         await t.down()
 
 
-async def run_benchmark(mode, parallel, topn, selected=None):
+async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
     """mode: peering | standard | full"""
     STATE.update(running=True, phase="baseline", items={}, log=[])
     run_id = db.new_run(mode)
     STATE["run_id"] = run_id
     baseline, status = {}, "done"
     try:
-        configs = [p for p in list_configs() if not selected or p.stem in selected]
+        configs = [p for p in list_configs()
+                   if (not selected or cid(p) in selected)
+                   and (not providers or provider(p) in providers)]
         for p in configs:
-            set_item(p.stem, status="queued")
+            set_item(cid(p), status="queued")
         targets = load_targets()
         weights = db.get_setting("weights", scoring.DEFAULT_WEIGHTS)
 
@@ -109,25 +122,25 @@ async def run_benchmark(mode, parallel, topn, selected=None):
         async def one(i, p):
             async with sem:
                 r = await test_peering(p, i, targets)
-                results[p.stem] = r
-                db.save_result(run_id, p.stem, r)
+                results[cid(p)] = r
+                db.save_result(run_id, cid(p), r)
 
         await asyncio.gather(*(one(i, p) for i, p in enumerate(configs)))
 
         if mode != "peering":
             STATE["phase"] = "throughput"
             ranked = sorted(
-                (p for p in configs if not results[p.stem].get("error")),
-                key=lambda p: -scoring.score(results[p.stem], weights)["total"])
+                (p for p in configs if not results[cid(p)].get("error")),
+                key=lambda p: -scoring.score(results[cid(p)], weights)["total"])
             for p in (ranked if mode == "full" else ranked[:topn]):
-                set_item(p.stem, status="throughput")
+                set_item(cid(p), status="throughput")
                 try:
-                    results[p.stem]["throughput"] = await test_throughput(p, 0, 8)
-                    db.save_result(run_id, p.stem, results[p.stem])
-                    set_item(p.stem, status="done")
+                    results[cid(p)]["throughput"] = await test_throughput(p, 0, 8)
+                    db.save_result(run_id, cid(p), results[cid(p)])
+                    set_item(cid(p), status="done")
                 except Exception as e:  # noqa: BLE001
-                    log(f"{p.stem}: throughput failed: {e}")
-                    set_item(p.stem, status="throughput failed")
+                    log(f"{cid(p)}: throughput failed: {e}")
+                    set_item(cid(p), status="throughput failed")
     except Exception as e:  # noqa: BLE001
         log(f"run aborted: {e}")
         status = "failed"

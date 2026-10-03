@@ -56,3 +56,18 @@ def test_weights_change_ranking():
 
 def test_error_scores_zero():
     assert scoring.score({"error": "x"}, scoring.DEFAULT_WEIGHTS)["total"] == 0.0
+
+
+def test_subfolders_are_providers(tmp_path, monkeypatch):
+    from app import db, runner
+    (tmp_path / "CryptoStorm").mkdir()
+    (tmp_path / "CryptoStorm" / "cs-poland.conf").write_text(CONF)
+    (tmp_path / "Windscribe").mkdir()
+    (tmp_path / "Windscribe" / "cs-poland.conf").write_text(CONF)  # same name, other provider
+    (tmp_path / "top.conf").write_text(CONF)
+    monkeypatch.setattr(db, "CONFIGS", tmp_path)
+    found = runner.list_configs()
+    assert len(found) == 3
+    assert {runner.cid(p) for p in found} == {
+        "CryptoStorm/cs-poland", "Windscribe/cs-poland", "top"}
+    assert {runner.provider(p) for p in found} == {"CryptoStorm", "Windscribe", "(root)"}

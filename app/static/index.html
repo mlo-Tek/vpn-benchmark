@@ -43,6 +43,7 @@
   <button class="primary" id="start">Test starten</button>
   <span id="cfgcount" class="muted"></span>
 </div>
+<div class="bar" id="providers"></div>
 
 <div class="card" id="progress" hidden>
   <div id="phase"></div>
@@ -136,7 +137,8 @@ async function poll() {
 
 $("start").onclick = async () => {
   await api("/api/run", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode: $("mode").value, parallel: +$("parallel").value, topn: +$("topn").value }) });
+    body: JSON.stringify({ mode: $("mode").value, parallel: +$("parallel").value, topn: +$("topn").value,
+      providers: [...document.querySelectorAll('#providers input:checked')].map(i => i.value) }) });
   poll();
 };
 $("runs").onchange = e => loadRun(e.target.value);
@@ -153,7 +155,12 @@ async function initWeights() {
   };
 }
 
-api("/api/configs").then(c => $("cfgcount").textContent = `${c.length} Configs in /configs`);
+api("/api/configs").then(c => {
+  $("cfgcount").textContent = `${c.length} Configs in /configs`;
+  const n = {}; c.forEach(x => n[x.provider] = (n[x.provider] || 0) + 1);
+  $("providers").innerHTML = Object.entries(n).sort().map(([p, k]) =>
+    `<label><input type="checkbox" value="${p}" checked> ${p} (${k})</label>`).join(" ");
+});
 initWeights(); refreshRuns(); poll(); setInterval(poll, 2000);
 </script>
 </body>
