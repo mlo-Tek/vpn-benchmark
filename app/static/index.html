@@ -33,6 +33,7 @@
   nav button.on { color:var(--fg); border-color:var(--accent); }
   section { display:none; } section.on { display:block; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; box-shadow:var(--shadow); }
+  .card { min-width:0; max-width:100%; }
   .card h2 { font-size:12px; margin:0 0 10px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
   .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   label.f { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
@@ -59,7 +60,7 @@
   .pill { cursor:pointer; user-select:none; border:1px solid var(--line); background:var(--panel); } .pill.on { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
   .steps { display:flex; gap:6px; flex-wrap:wrap; }
   .step { padding:2px 12px; border-radius:99px; background:var(--soft); color:var(--muted); font-size:12px; font-weight:600; } .step.on { background:var(--accent); color:var(--accent-fg); } .step.done { color:var(--good); }
-  pre.log { margin:8px 0 0; max-height:200px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,monospace; background:var(--soft); padding:10px; border-radius:8px; }
+  pre.log { white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0 0; max-height:260px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,monospace; background:var(--soft); padding:10px; border-radius:8px; }
   .split { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:14px; align-items:start; }
   .side { position:sticky; top:12px; display:grid; gap:14px; } .side .card, .split .card { margin-bottom:0; }
   .main { display:grid; gap:14px; }
@@ -132,61 +133,57 @@
 
 <!-- ================= START ================= -->
 <section id="t-start" class="on">
- <div class="split">
-  <div class="main">
-    <div class="dropbox" id="dropBox">
-      <span class="ic">⇪</span>
-      <div style="flex:1;min-width:220px"><b>Configs hinzufügen</b>
-        <div class="small muted">.conf-Dateien oder ganze Ordner hierher ziehen (geht auch auf der ganzen Seite). Der Anbieter wird aus dem Endpoint erkannt, ein Ordnername hat Vorrang.</div></div>
-      <button class="btn" id="pickFiles">Dateien wählen</button>
-      <button class="btn" id="pickDir">Ordner wählen</button>
-      <input type="text" id="upProv" placeholder="Anbieter festlegen (optional)" style="width:210px">
-      <input type="file" id="fileIn" accept=".conf" multiple hidden>
-      <input type="file" id="dirIn" webkitdirectory multiple hidden>
+  <div class="card" id="ctl">
+    <div class="row" style="gap:14px;align-items:flex-end">
+      <div class="big" style="align-self:center"><span id="selN">0</span> <span class="muted" style="font-size:15px;font-weight:600">von <span id="allN">0</span> ausgewählt</span></div>
+      <label class="f">Modus
+        <select id="mode" style="min-width:260px">
+          <option value="standard">Standard: Peering + Durchsatz der Top-N</option>
+          <option value="peering">Nur Peering (am schnellsten)</option>
+          <option value="full">Voll: Durchsatz für alle</option>
+        </select></label>
+      <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:72px"></label>
+      <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:72px"></label>
+      <label class="f">Durchsatz-Messung <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
+      <span class="spacer"></span>
+      <button class="btn primary" id="start" style="padding:10px 28px">Test starten</button>
+      <button class="btn warn" id="pause" hidden style="padding:10px 22px">Pause</button>
+      <button class="btn danger" id="stop" hidden style="padding:10px 22px">Stopp</button>
     </div>
-    <div class="card">
-      <div class="row" style="margin-bottom:10px">
-        <input type="search" id="q" placeholder="Suchen: Name, Anbieter, Endpoint …" style="flex:1;min-width:180px">
-        <button class="btn sm" id="selVis">Sichtbare auswählen</button>
-        <button class="btn sm" id="selNone">Keine</button>
+    <div id="liveBox" hidden style="margin-top:14px">
+      <div class="row" style="margin-bottom:6px">
+        <div class="steps" id="steps"></div><span class="spacer"></span>
+        <span class="muted small" id="liveInfo"></span><span class="muted small" id="elapsed"></span><b id="pct" style="font-size:18px;min-width:48px;text-align:right">0%</b>
       </div>
-      <div class="row" id="provChips" style="margin-bottom:8px"></div>
-      <div class="scroll"><table id="cfgTbl"></table></div>
+      <div class="bar big"><i id="pbar" style="width:0"></i></div>
+      <div class="banner" id="pausedBanner" hidden>Pausiert. Laufende Configs werden noch fertig, neue starten nach „Fortsetzen“.</div>
     </div>
   </div>
 
-  <aside class="side">
-    <div class="card" id="ctl">
-      <h2>Test</h2>
-      <div class="big"><span id="selN">0</span> <span class="muted" style="font-size:15px;font-weight:600">von <span id="allN">0</span> Configs ausgewählt</span></div>
-      <div style="display:grid;gap:10px;margin-top:12px">
-        <label class="f">Modus
-          <select id="mode">
-            <option value="standard">Standard: Peering + Durchsatz der Top-N</option>
-            <option value="peering">Nur Peering (am schnellsten)</option>
-            <option value="full">Voll: Durchsatz für alle</option>
-          </select></label>
-        <div class="row" style="flex-wrap:nowrap">
-          <label class="f" style="flex:1">Parallel <input id="parallel" type="number" value="8" min="1" max="32"></label>
-          <label class="f" style="flex:1">Top-N <input id="topn" type="number" value="10" min="1"></label>
-        </div>
-        <label class="f">Durchsatz-Messung <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
-        <button class="btn primary block" id="start">Test starten</button>
-        <div class="row" style="flex-wrap:nowrap"><button class="btn warn block" id="pause" hidden>Pause</button><button class="btn danger block" id="stop" hidden>Stopp</button></div>
-      </div>
-      <div id="liveBox" hidden style="margin-top:14px">
-        <div class="steps" id="steps"></div>
-        <div class="row" style="margin:10px 0 6px"><b id="pct" style="font-size:18px">0%</b><span class="spacer"></span><span class="muted small" id="liveInfo"></span></div>
-        <div class="bar big"><i id="pbar" style="width:0"></i></div>
-        <div class="muted small" id="elapsed" style="margin-top:6px"></div>
-        <div class="banner" id="pausedBanner" hidden>Pausiert. Laufende Configs werden noch fertig, neue starten nach „Fortsetzen“.</div>
-      </div>
+  <div class="dropbox" id="dropBox" style="margin-bottom:14px">
+    <span class="ic">⇪</span>
+    <div style="flex:1;min-width:240px"><b>Configs hinzufügen</b>
+      <div class="small muted">.conf-Dateien oder Ordner hierher ziehen (geht auch auf der ganzen Seite). Der Anbieter wird aus dem Endpoint erkannt, ein Ordnername hat Vorrang.</div></div>
+    <button class="btn" id="pickFiles">Dateien wählen</button>
+    <button class="btn" id="pickDir">Ordner wählen</button>
+    <input type="text" id="upProv" placeholder="Anbieter festlegen (optional)" style="width:210px">
+    <input type="file" id="fileIn" accept=".conf" multiple hidden>
+    <input type="file" id="dirIn" webkitdirectory multiple hidden>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <input type="search" id="q" placeholder="Suchen: Name, Anbieter, Endpoint …" style="flex:1;min-width:180px">
+      <button class="btn sm" id="selVis">Sichtbare auswählen</button>
+      <button class="btn sm" id="selNone">Keine</button>
     </div>
-    <div class="card" id="logCard" hidden>
-      <details><summary class="muted">Log</summary><pre class="log" id="log"></pre></details>
-    </div>
-  </aside>
- </div>
+    <div class="row" id="provChips" style="margin-bottom:8px"></div>
+    <div class="scroll"><table id="cfgTbl"></table></div>
+  </div>
+
+  <div class="card" id="logCard" hidden>
+    <details><summary class="muted">Log</summary><pre class="log" id="log"></pre></details>
+  </div>
 </section>
 
 <!-- ================= RESULTS ================= -->
@@ -365,9 +362,9 @@ async function poll() {
     const cur = STEPS.map(x => x[0]).indexOf(s.phase);
     $("steps").innerHTML = STEPS.map(([k, n], i) => `<span class="step ${i === cur ? "on" : i < cur ? "done" : ""}">${n}</span>`).join("");
     $("pct").textContent = Math.round(s.progress) + "%"; $("pbar").style.width = s.progress + "%";
-    $("liveInfo").textContent = `${s.done}/${s.total} Peering fertig`;
+    $("liveInfo").textContent = `${s.done}/${s.total} Peering fertig ·`;
     const el = s.started ? Date.now() / 1000 - s.started : null;
-    $("elapsed").textContent = el != null ? `· ${dur(el)}${s.progress > 8 && !s.paused ? " · noch ca. " + dur(el / s.progress * (100 - s.progress)) : ""}` : "";
+    $("elapsed").textContent = el != null ? `${dur(el)}${s.progress > 8 && !s.paused ? " · noch ca. " + dur(el / s.progress * (100 - s.progress)) : ""}` : "";
   }
   if (hasRun) { const lg = $("log"), end = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 20; lg.textContent = s.log.join("\n"); if (end) lg.scrollTop = lg.scrollHeight; }
   if (s.running && s.run_id) { if ($("runs").value != s.run_id) await loadRuns(s.run_id); else await loadRun(s.run_id); }
