@@ -57,7 +57,7 @@ async def test_peering(path, idx, targets):
     name = cid(path)
     t0 = time.time()
     set_item(name, status="connecting", stage="Tunnel aufbauen", t0=t0)
-    result, events = {}, []
+    result, events = {"provider": provider(path)}, []
     t = None
 
     def ev(msg):
