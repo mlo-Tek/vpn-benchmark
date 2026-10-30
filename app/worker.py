@@ -111,38 +111,85 @@ async def info(args):
     return out
 
 
-async def throughput(args):
-    """Multi-stream down/up against Cloudflare's speed endpoints."""
-    duration, streams = args.get("duration", 8), args.get("streams", 8)
-    ctx = ssl.create_default_context()
-    host = "speed.cloudflare.com"
+# Download sources. Several, because a single endpoint answers repeated heavy requests from
+# the same IP (all tunnels of one provider share the exit IP) with 429/403 or throttles them.
+DL_SOURCES = [("speed.cloudflare.com", "/__down?bytes=100000000"),
+              ("nbg1-speed.hetzner.com", "/100MB.bin"),
+              ("proof.ovh.net", "/files/100Mb.dat"),
+              ("fsn1-speed.hetzner.com", "/100MB.bin")]  # all checked: HTTPS, HTTP 200, no auth
 
-    async def run(direction):
-        counter = [0]
+
+async def read_status(r):
+    head = await asyncio.wait_for(r.readuntil(b"\r\n\r\n"), 8)
+    return int(head.split(b" ", 2)[1])
+
+
+def aggregate(runs):
+    """Median of the valid runs. A run that collapsed to <15% of the best one is a
+    throttled/refused run, not a result, and is left out (but still listed)."""
+    best = max(r["mbps"] for r in runs)
+    good = [r for r in runs if r["mbps"] >= 0.15 * best] or runs
+    med = sorted(r["mbps"] for r in good)[len(good) // 2]
+    pick = min(good, key=lambda r: abs(r["mbps"] - med))
+    return {**pick, "runs": [round(r["mbps"], 1) for r in runs], "excluded": len(runs) - len(good)}
+
+
+async def throughput(args):
+    """Multi-stream down/up. Only HTTP 200 responses count as data; rejected requests are
+    counted separately so a rate-limited run can be recognised and excluded."""
+    duration, streams = args.get("duration", 8), args.get("streams", 6)
+    ctx = ssl.create_default_context()
+    up_host = "speed.cloudflare.com"
+    cooldown = {}   # source index -> time until which it counts as rate limited (kept across repeats)
+    got = {}        # source index -> bytes it delivered so far: the best source is tried first
+
+    async def run(direction, run_idx):
+        counter, rejected, by_src = [0], {}, {}
         stop = time.monotonic() + duration
+        n = len(DL_SOURCES)
+
+        def pick():
+            now = time.monotonic()
+            free = [i for i in range(n) if cooldown.get(i, 0) <= now]
+            return max(free, key=lambda i: (got.get(i, 0), -i)) if free else None
 
         async def down():
             while time.monotonic() < stop:
-                req = (f"GET /__down?bytes=25000000 HTTP/1.1\r\nHost: {host}\r\n"
+                i = pick()
+                if i is None:  # every source is cooling down
+                    await asyncio.sleep(0.5)
+                    continue
+                host, path = DL_SOURCES[i]
+                req = (f"GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: curl/8\r\n"
                        "Connection: close\r\n\r\n").encode()
                 try:
                     r, w = await https_request(host, req, ctx)
+                    status = await read_status(r)
+                    if status != 200:
+                        rejected[status] = rejected.get(status, 0) + 1
+                        cooldown[i] = time.monotonic() + (30 if status == 429 else 10)
+                        w.close()
+                        await asyncio.sleep(0.2)
+                        continue
                     while time.monotonic() < stop:
                         chunk = await asyncio.wait_for(r.read(65536), 5)
                         if not chunk:
                             break
                         counter[0] += len(chunk)
+                        by_src[host] = by_src.get(host, 0) + len(chunk)
+                        got[i] = got.get(i, 0) + len(chunk)
                     w.close()
                 except Exception:
-                    await asyncio.sleep(0.2)
+                    cooldown[i] = time.monotonic() + 10
+                    await asyncio.sleep(0.3)
 
         async def up():
             size, block = 10_000_000, b"0" * 65536
             while time.monotonic() < stop:
-                req = (f"POST /__up HTTP/1.1\r\nHost: {host}\r\nContent-Length: {size}\r\n"
+                req = (f"POST /__up HTTP/1.1\r\nHost: {up_host}\r\nContent-Length: {size}\r\n"
                        "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n").encode()
                 try:
-                    r, w = await https_request(host, req, ctx)
+                    r, w = await https_request(up_host, req, ctx)
                     sent = 0
                     while sent < size and time.monotonic() < stop:
                         n = min(len(block), size - sent)
@@ -152,7 +199,7 @@ async def throughput(args):
                         counter[0] += n
                     w.close()
                 except Exception:
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.3)
 
         async def sampler():
             samples, last = [], 0
@@ -169,14 +216,22 @@ async def throughput(args):
             t.cancel()
         steady = samples[2:] or samples  # drop TCP slow-start warmup
         mbps = statistics.mean(steady) if steady else 0.0
-        return {"mbps": mbps, "stability": (min(steady) / mbps) if mbps else 0.0}
+        out = {"mbps": mbps, "stability": (min(steady) / mbps) if mbps else 0.0}
+        if direction == "down":
+            if by_src:
+                out["source"] = max(by_src, key=by_src.get)  # where most of the data came from
+            if rejected:
+                out["rejected"] = rejected
+        return out
 
     reps, out = max(1, args.get("repeats", 1)), {}
     for direction, key in (("down", "dl"), ("up", "ul")):
-        runs = [await run(direction) for _ in range(reps)]
-        med = sorted(r["mbps"] for r in runs)[len(runs) // 2]
-        pick = min(runs, key=lambda r: abs(r["mbps"] - med))  # the median run
-        out[key] = {**pick, "runs": [round(r["mbps"], 1) for r in runs]}
+        runs = []
+        for i in range(reps):
+            if i and direction == "down":
+                await asyncio.sleep(15)  # public servers throttle repeated downloads per IP
+            runs.append(await run(direction, i))
+        out[key] = aggregate(runs)
     return out
 
 
