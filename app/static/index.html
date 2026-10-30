@@ -522,6 +522,7 @@ $("resBody").onclick = e => {
 function detail(name) {
   const r = current.results.find(x => x.name === name); if (!r) return; const e = r.exit || {}, s = r.score;
   let h = `<h3 style="margin:0 0 4px">${esc(r.name)}</h3><div class="muted small">Exit ${esc(e.ip || "–")} · ${esc(e.city || "")} ${esc(e.country || "")} · ${esc(e.org || "")}</div>`;
+  if (r.bittorrent) h += `<div class="small muted" style="margin-top:8px">Echte BitTorrent-Handshakes (optional, nur ausgehend): <b>${fmt(r.bittorrent.success * 100)}%</b> von ${r.bittorrent.total} konfigurierten Test-Peers. Keine Prüfung von Portweiterleitung oder uTP.</div>`;
   if (r.error) h += `<p><span class="chip bad">Fehler</span> ${esc(r.error)}</p>`;
   else h += `<div class="row" style="margin:14px 0;gap:18px">${ring(s.total, 96)}<div class="stats" style="flex:1;margin:0">
       <div class="stat"><div class="l">Peering</div><div class="v">${fmt(s.peering, 0)}</div></div><div class="stat"><div class="l">TCP-Swarm</div><div class="v">${fmt(s.swarm)}%</div></div>
