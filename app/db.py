@@ -28,6 +28,10 @@ def conn():
         CREATE TABLE IF NOT EXISTS results (run_id INTEGER, name TEXT, data TEXT);
         CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
     """)
+    try:
+        c.execute("ALTER TABLE runs ADD COLUMN log TEXT")
+    except sqlite3.OperationalError:
+        pass  # column exists
     return c
 
 
@@ -48,10 +52,10 @@ def new_run(mode):
                          (time.time(), mode)).lastrowid
 
 
-def finish_run(run_id, baseline, status="done"):
+def finish_run(run_id, baseline, status="done", log=""):
     with conn() as c:
-        c.execute("UPDATE runs SET baseline=?, status=?, finished=? WHERE id=?",
-                  (json.dumps(baseline), status, time.time(), run_id))
+        c.execute("UPDATE runs SET baseline=?, status=?, finished=?, log=? WHERE id=?",
+                  (json.dumps(baseline), status, time.time(), log, run_id))
 
 
 def save_result(run_id, name, data):
@@ -74,5 +78,6 @@ def get_run(run_id):
         rows = c.execute("SELECT name, data FROM results WHERE run_id=?", (run_id,)).fetchall()
     run = dict(run)
     run["baseline"] = json.loads(run["baseline"]) if run["baseline"] else None
+    run["log"] = run.get("log") or ""
     run["results"] = [dict(json.loads(r["data"]), name=r["name"]) for r in rows]
     return run

@@ -80,7 +80,7 @@ async def https_request(host, request, ctx):
     return r, w
 
 
-async def info(_):
+async def info(args):
     out = {}
     ctx = ssl.create_default_context()
     try:
@@ -96,12 +96,15 @@ async def info(_):
                    org=body.get("org"))
     except Exception as e:
         out["error"] = f"ipinfo failed: {e!r}"
-    try:
-        _, w = await asyncio.wait_for(asyncio.open_connection("2606:4700:4700::1111", 443), 3)
-        w.close()
-        out["ipv6"] = True
-    except Exception:
-        out["ipv6"] = False
+    if args.get("skip_v6"):
+        out["ipv6"] = None
+    else:
+        try:
+            _, w = await asyncio.wait_for(asyncio.open_connection("2606:4700:4700::1111", 443), 3)
+            w.close()
+            out["ipv6"] = True
+        except Exception:
+            out["ipv6"] = False
     t = time.perf_counter()
     out["dns_ok"] = (await resolve("www.wikipedia.org")) is not None
     out["dns_ms"] = (time.perf_counter() - t) * 1000
@@ -168,7 +171,13 @@ async def throughput(args):
         mbps = statistics.mean(steady) if steady else 0.0
         return {"mbps": mbps, "stability": (min(steady) / mbps) if mbps else 0.0}
 
-    return {"dl": await run("down"), "ul": await run("up")}
+    reps, out = max(1, args.get("repeats", 1)), {}
+    for direction, key in (("down", "dl"), ("up", "ul")):
+        runs = [await run(direction) for _ in range(reps)]
+        med = sorted(r["mbps"] for r in runs)[len(runs) // 2]
+        pick = min(runs, key=lambda r: abs(r["mbps"] - med))  # the median run
+        out[key] = {**pick, "runs": [round(r["mbps"], 1) for r in runs]}
+    return out
 
 
 COMMANDS = {"matrix": matrix, "swarm": swarm, "info": info, "throughput": throughput}

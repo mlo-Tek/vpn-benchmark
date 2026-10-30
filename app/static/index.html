@@ -84,6 +84,14 @@
   .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:14px; }
   .hm td, .hm th { padding:5px 8px; } .hm td.c { text-align:center; min-width:52px; font-variant-numeric:tabular-nums; }
   .hm td:first-child, .hm th:first-child { position:sticky; left:0; background:var(--panel); z-index:1; }
+  .tp { display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; padding:5px 0; cursor:pointer; }
+  .tp:hover { background:var(--soft); } .tp .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+  .tp .b { display:grid; grid-template-columns:1fr 84px; gap:8px; align-items:center; font-size:12px; font-variant-numeric:tabular-nums; }
+  .tp .b + .b { margin-top:3px; } .tp .bar { position:relative; overflow:visible; } .tp .bar > i { border-radius:99px; }
+  .tp .up .bar > i { background:color-mix(in srgb,var(--accent) 45%,var(--soft)); }
+  .tp .mk { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--fg); opacity:.7; }
+  .tp .lat > i { background:var(--warn); }
+  .hint { font-size:12px; color:var(--muted); margin:-4px 0 10px; }
   svg text { fill:var(--muted); font-size:11px; } svg .gl { stroke:var(--line); }
   svg circle { cursor:pointer; stroke:var(--panel); stroke-width:1.5; } svg circle:hover { stroke:var(--fg); }
   dialog { border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--fg); max-width:780px; width:94vw; padding:18px; }
@@ -122,6 +130,7 @@
         </select></label>
       <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:70px"></label>
       <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:70px"></label>
+      <label class="f">Durchsatz <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
       <span class="spacer"></span>
       <span><b id="selN">0</b> von <b id="allN">0</b> ausgewählt</span>
       <button class="btn primary" id="start">Test starten</button>
@@ -301,7 +310,7 @@ async function poll() {
   rs.querySelector("span").textContent = s.running ? (s.paused ? "Pausiert" : `Läuft: ${({ baseline: "Baseline", peering: "Peering", throughput: "Durchsatz" })[s.phase] || s.phase}`) : "Bereit";
   $("start").hidden = s.running; $("pause").hidden = !s.running; $("stop").hidden = !s.running;
   $("pause").textContent = s.paused ? "Fortsetzen" : "Pause";
-  ["mode", "parallel", "topn"].forEach(i => $(i).disabled = s.running);
+  ["mode", "parallel", "topn", "tpRuns"].forEach(i => $(i).disabled = s.running);
   const hasRun = s.running || s.log.length;
   $("liveBox").hidden = !s.running; $("logCard").hidden = !hasRun; $("pausedBanner").hidden = !s.paused;
   if (s.running) {
@@ -320,7 +329,7 @@ async function poll() {
 }
 $("start").onclick = async () => {
   if (!configs.length) return toast("Erst Configs hochladen");
-  try { await api("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: $("mode").value, parallel: +$("parallel").value, topn: +$("topn").value, selected: [...selected] }) }); poll(); } catch (e) { toast(e.message); }
+  try { await api("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: $("mode").value, parallel: +$("parallel").value, topn: +$("topn").value, tp_runs: +$("tpRuns").value, selected: [...selected] }) }); poll(); } catch (e) { toast(e.message); }
 };
 $("pause").onclick = async () => { await api(status.paused ? "/api/resume" : "/api/pause", { method: "POST" }); poll(); };
 $("stop").onclick = async () => { if (confirm("Test wirklich stoppen? Die bisherigen Ergebnisse bleiben erhalten.")) { await api("/api/stop", { method: "POST" }); poll(); } };
@@ -343,20 +352,22 @@ const avgRtt = r => avg(Object.values(r.matrix || {}), m => m.median);
 
 function ring(score, size) { const c = scoreColor(score); return `<div class="ring" style="--p:${score};--c:${c};${size ? `width:${size}px;height:${size}px` : ""}"><b style="${size ? `width:${size - 20}px;height:${size - 20}px;font-size:${size / 4.2}px` : ""}">${fmt(score, 0)}</b></div>`; }
 
-function scatter(ok, hasTp) {
-  const pts = ok.map(r => ({ r, x: avgRtt(r), y: hasTp ? r.throughput?.dl.mbps : r.score.total })).filter(p => p.x != null && p.y != null);
-  if (pts.length < 2) return `<div class="empty">Zu wenige Messpunkte${hasTp ? " (Durchsatz fehlt)" : ""}.</div>`;
-  const W = 640, H = 300, m = { l: 46, r: 14, t: 12, b: 36 };
-  const xmax = Math.max(...pts.map(p => p.x)) * 1.1, xmin = Math.max(0, Math.min(...pts.map(p => p.x)) * .8), ymax = Math.max(...pts.map(p => p.y)) * 1.1, ymin = 0;
-  const X = v => m.l + (v - xmin) / (xmax - xmin || 1) * (W - m.l - m.r), Y = v => H - m.b - (v - ymin) / (ymax - ymin || 1) * (H - m.t - m.b);
-  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">`;
-  for (let i = 0; i <= 4; i++) { const yv = ymin + (ymax - ymin) * i / 4, xv = xmin + (xmax - xmin) * i / 4;
-    s += `<line class="gl" x1="${m.l}" x2="${W - m.r}" y1="${Y(yv)}" y2="${Y(yv)}"/><text x="${m.l - 6}" y="${Y(yv) + 4}" text-anchor="end">${fmt(yv)}</text>
-      <text x="${X(xv)}" y="${H - m.b + 16}" text-anchor="middle">${fmt(xv)}</text>`; }
-  s += `<text x="${W / 2}" y="${H - 4}" text-anchor="middle">Ø Latenz zu Peer-Ländern (ms), weiter links ist besser</text>
-    <text transform="rotate(-90)" x="${-H / 2}" y="12" text-anchor="middle">${hasTp ? "Download Mbit/s" : "Score"}</text>`;
-  pts.forEach(p => s += `<circle data-n="${esc(p.r.name)}" cx="${X(p.x)}" cy="${Y(p.y)}" r="7" fill="${pcolor(provOf(p.r.name))}"><title>${esc(p.r.name)}: ${fmt(p.x)} ms · ${fmt(p.y)}${hasTp ? " Mbit/s" : ""}</title></circle>`);
-  return s + "</svg>";
+function tpChart(ok, base) {
+  const rows = ok.filter(r => r.throughput).sort((a, b) => b.throughput.dl.mbps - a.throughput.dl.mbps);
+  if (!rows.length) return `<div class="empty">Noch keine Durchsatz-Messung. Wähle den Modus „Standard“ oder „Voll“.</div>`;
+  const max = Math.max(base.dl?.mbps || 0, base.ul?.mbps || 0, ...rows.flatMap(r => [r.throughput.dl.mbps, r.throughput.ul.mbps])) * 1.05 || 1;
+  const mk = v => v == null ? "" : `<i class="mk" style="left:${v / max * 100}%"></i>`;
+  return rows.map(r => `<div class="tp" data-n="${esc(r.name)}"><span class="n" title="${esc(r.name)}">${esc(shortName(r.name))}</span><div>
+    <div class="b"><div class="bar"><i style="width:${r.throughput.dl.mbps / max * 100}%"></i>${mk(base.dl?.mbps)}</div><span>↓ ${fmt(r.throughput.dl.mbps)}</span></div>
+    <div class="b up"><div class="bar"><i style="width:${r.throughput.ul.mbps / max * 100}%"></i>${mk(base.ul?.mbps)}</div><span>↑ ${fmt(r.throughput.ul.mbps)}</span></div></div></div>`).join("");
+}
+function latChart(ok, baseAvg) {
+  const rows = ok.map(r => ({ r, a: avgRtt(r) })).filter(x => x.a != null).sort((x, y) => x.a - y.a);
+  if (!rows.length) return `<div class="empty">–</div>`;
+  const max = Math.max(...rows.map(x => x.a - (baseAvg || 0)), 1);
+  return rows.map(({ r, a }) => { const d = a - (baseAvg || 0);
+    return `<div class="tp" data-n="${esc(r.name)}"><span class="n" title="${esc(r.name)}">${esc(shortName(r.name))}</span>
+      <div class="b"><div class="bar lat"><i style="width:${Math.max(2, d / max * 100)}%"></i></div><span>${baseAvg != null ? (d >= 0 ? "+" : "") + fmt(d) + " ms" : fmt(a) + " ms"}</span></div></div>`; }).join("");
 }
 
 function renderResults() {
@@ -373,14 +384,15 @@ function renderResults() {
   h += `<div class="podium">` + ok.slice(0, 3).map((r, i) => { const e = r.exit || {};
     return `<div class="pod ${i === 0 ? "first" : ""}" data-n="${esc(r.name)}"><span class="rank">PLATZ ${i + 1}</span>${ring(r.score.total)}
       <div style="min-width:0"><h3 title="${esc(r.name)}">${esc(shortName(r.name))}</h3><div class="muted small">${esc(provOf(r.name))} · Exit ${esc(e.city || "")} ${esc(e.country || "")}</div>
-      <div class="facts"><span>Ø Latenz</span><b>${fmt(avgRtt(r))} ms</b><span>Swarm</span><b>${fmt((r.swarm?.success || 0) * 100)}%</b><span>Download</span><b>${r.throughput ? fmt(r.throughput.dl.mbps) + " Mbit/s" : "–"}</b><span>Handshake</span><b>${fmt(r.handshake_s, 2)} s</b></div></div></div>`; }).join("") + `</div>`;
+      <div class="facts"><span>Ø Latenz</span><b>${fmt(avgRtt(r))} ms</b><span>Swarm</span><b>${fmt((r.swarm?.success || 0) * 100)}%</b><span>Download</span><b>${r.throughput ? fmt(r.throughput.dl.mbps) + " Mbit/s" : "–"}</b><span>Upload</span><b>${r.throughput ? fmt(r.throughput.ul.mbps) + " Mbit/s" : "–"}</b><span>Handshake</span><b>${fmt(r.handshake_s, 2)} s</b></div></div></div>`; }).join("") + `</div>`;
 
   // stats
-  const bestRtt = best(ok, avgRtt), bestDl = best(ok, r => r.throughput?.dl.mbps, -1);
+  const bestRtt = best(ok, avgRtt), bestDl = best(ok, r => r.throughput?.dl.mbps, -1), bestUl = best(ok, r => r.throughput?.ul.mbps, -1);
   h += `<div class="stats">
     <div class="stat"><div class="l">Getestet</div><div class="v">${run.results.length}</div><div class="small muted">${ok.length} OK${bad ? ` · <span style="color:var(--bad)">${bad} Fehler</span>` : ""}</div></div>
     <div class="stat"><div class="l">Niedrigste Ø-Latenz</div><div class="v">${bestRtt ? fmt(avgRtt(bestRtt)) + " ms" : "–"}</div><div class="small muted">${esc(bestRtt ? shortName(bestRtt.name) : "")}${baseAvg != null ? ` · ohne VPN ${fmt(baseAvg)} ms` : ""}</div></div>
     <div class="stat"><div class="l">Schnellster Download</div><div class="v">${bestDl ? fmt(bestDl.throughput.dl.mbps) : "–"}<span class="small muted"> Mbit/s</span></div><div class="small muted">${esc(bestDl ? shortName(bestDl.name) : "nicht gemessen")}${base.dl ? ` · ohne VPN ${fmt(base.dl.mbps)}` : ""}</div></div>
+    <div class="stat"><div class="l">Schnellster Upload</div><div class="v">${bestUl ? fmt(bestUl.throughput.ul.mbps) : "–"}<span class="small muted"> Mbit/s</span></div><div class="small muted">${esc(bestUl ? shortName(bestUl.name) : "nicht gemessen")}${base.ul ? ` · ohne VPN ${fmt(base.ul.mbps)}` : ""}</div></div>
     <div class="stat"><div class="l">Ø Swarm-Erfolg</div><div class="v">${fmt(avg(ok, r => (r.swarm?.success || 0) * 100))}%</div><div class="small muted">100 parallele Verbindungen</div></div></div>`;
 
   // best per country
@@ -389,11 +401,13 @@ function renderResults() {
 
   // scatter + providers
   const byP = {}; ok.forEach(r => (byP[provOf(r.name)] ||= []).push(r));
-  h += `<div class="grid2"><div class="card"><h2>${hasTp ? "Latenz vs. Download" : "Latenz vs. Score"}</h2>${scatter(ok, hasTp)}
-      <div class="row small muted" style="margin-top:4px">${Object.keys(byP).map(p => `<span><span style="color:${pcolor(p)}">●</span> ${esc(p)}</span>`).join("")}</div></div>
-    <div class="card"><h2>Anbieter im Vergleich</h2><table><thead><tr><th class="l">Anbieter</th><th>Configs</th><th>Ø Score</th><th>Ø Latenz</th><th>Ø Swarm</th><th>Ø ↓</th></tr></thead><tbody>` +
+  h += `<div class="grid2"><div class="card"><h2>Durchsatz: Download &amp; Upload</h2>
+      <div class="hint">Heller Balken = Upload, der senkrechte Strich = was deine Leitung ohne VPN schafft. Je näher am Strich, desto weniger bremst das VPN.</div>${tpChart(ok, base)}</div>
+    <div class="card"><h2>Latenz-Aufschlag durch das VPN</h2>
+      <div class="hint">Wie viele Millisekunden länger die Verbindungen zu deinen Peer-Ländern im Schnitt dauern als ohne VPN${baseAvg != null ? ` (ohne VPN: ${fmt(baseAvg)} ms)` : ""}. Kürzer ist besser.</div>${latChart(ok, baseAvg)}</div></div>`;
+  if (Object.keys(byP).length > 1) h += `<div class="card"><h2>Anbieter im Vergleich</h2><table><thead><tr><th class="l">Anbieter</th><th>Configs</th><th>Ø Score</th><th>Ø Latenz</th><th>Ø Swarm</th><th>Ø ↓</th><th>Ø ↑</th></tr></thead><tbody>` +
     Object.entries(byP).sort((a, b) => avg(b[1], r => r.score.total) - avg(a[1], r => r.score.total)).map(([p, rs]) =>
-      `<tr><td class="l"><span style="color:${pcolor(p)}">●</span> ${esc(p)}</td><td>${rs.length}</td><td><b style="color:${scoreColor(avg(rs, r => r.score.total))}">${fmt(avg(rs, r => r.score.total), 1)}</b></td><td>${fmt(avg(rs, avgRtt))} ms</td><td>${fmt(avg(rs, r => (r.swarm?.success || 0) * 100))}%</td><td>${fmt(avg(rs, r => r.throughput?.dl.mbps))}</td></tr>`).join("") + `</tbody></table></div></div>`;
+      `<tr><td class="l"><span style="color:${pcolor(p)}">●</span> ${esc(p)}</td><td>${rs.length}</td><td><b style="color:${scoreColor(avg(rs, r => r.score.total))}">${fmt(avg(rs, r => r.score.total), 1)}</b></td><td>${fmt(avg(rs, avgRtt))} ms</td><td>${fmt(avg(rs, r => (r.swarm?.success || 0) * 100))}%</td><td>${fmt(avg(rs, r => r.throughput?.dl.mbps))}</td><td>${fmt(avg(rs, r => r.throughput?.ul.mbps))}</td></tr>`).join("") + `</tbody></table></div>`;
 
   // heatmap
   let rows = run.results.filter(r => !hmProv || provOf(r.name) === hmProv);
@@ -414,7 +428,9 @@ function renderResults() {
         return `<td class="c" style="${colorRtt(v)}" title="${esc(c)}: ${fmt(v)} ms · Loss ${fmt((r.matrix?.[c]?.loss || 0) * 100)}%">${show}</td>`; }).join("") +
       `<td class="c">${fmt(avgRtt(r))}</td><td>${r.swarm ? fmt(r.swarm.success * 100) + "%" : "–"}</td><td>${fmt(r.handshake_s, 2)}</td><td>${fmt(r.throughput?.dl.mbps)}</td><td>${fmt(r.throughput?.ul.mbps)}</td></tr>`;
   }
-  body.innerHTML = h + `</tbody></table></div><div class="small muted" style="margin-top:8px">Zeile anklicken für Details, Spaltenkopf zum Sortieren. Grün = niedrige Latenz, Rot = hohe.</div></div>`;
+  const logTxt = status.running && status.run_id === run.id ? status.log.join("\n") : (run.log || "(kein Log gespeichert)");
+  body.innerHTML = h + `</tbody></table></div><div class="small muted" style="margin-top:8px">Zeile anklicken für Details, Spaltenkopf zum Sortieren. Grün = niedrige Latenz, Rot = hohe.</div></div>
+    <div class="card"><div class="row"><h2 style="margin:0">Log dieses Laufs</h2><span class="spacer"></span><a class="btn sm" href="/api/runs/${run.id}/log" download="vpn-benchmark-lauf-${run.id}.log">Herunterladen</a></div><pre class="log" style="max-height:320px">${esc(logTxt)}</pre></div>`;
   $("hmProv").onchange = e => { hmProv = e.target.value; renderResults(); };
   $("hmTop").onchange = e => { hmTop = +e.target.value; renderResults(); };
   $("hmMode").onchange = e => { hmMode = e.target.value; renderResults(); };
@@ -430,9 +446,13 @@ function detail(name) {
   else h += `<div class="row" style="margin:14px 0;gap:18px">${ring(s.total, 96)}<div class="stats" style="flex:1;margin:0">
       <div class="stat"><div class="l">Peering</div><div class="v">${fmt(s.peering, 0)}</div></div><div class="stat"><div class="l">Swarm</div><div class="v">${fmt(s.swarm)}%</div></div>
       <div class="stat"><div class="l">Zuverlässigkeit</div><div class="v">${fmt(s.reliability)}</div></div><div class="stat"><div class="l">Durchsatz</div><div class="v">${s.throughput == null ? "–" : fmt(s.throughput)}</div></div></div></div>
-    <div class="small muted" style="margin-bottom:8px">Handshake ${fmt(r.handshake_s, 2)} s · MTU 1420 ${r.mtu_ok ? "ok" : "Fragmentierung"} · IPv6 ${r.ipv6 ? "ja" : "nein"} · DNS ${r.dns_ok ? fmt(r.dns_ms) + " ms" : "Fehler"}${r.throughput ? ` · ↓ ${fmt(r.throughput.dl.mbps)} (Stabilität ${fmt(r.throughput.dl.stability * 100)}%) / ↑ ${fmt(r.throughput.ul.mbps)} Mbit/s` : ""}</div>
+    <div class="small muted" style="margin-bottom:8px">Handshake ${fmt(r.handshake_s, 2)} s · MTU 1420 ${r.mtu_ok ? "ok" : "Fragmentierung"} · IPv6 ${r.ipv6 == null ? "aus (nur IPv4)" : r.ipv6 ? "ja" : "nein"} · DNS ${r.dns_ok ? fmt(r.dns_ms) + " ms" : "Fehler"}</div>${r.throughput ? `<div class="small" style="margin-bottom:8px">↓ <b>${fmt(r.throughput.dl.mbps)}</b> Mbit/s${(r.throughput.dl.runs || []).length > 1 ? ` (Läufe ${r.throughput.dl.runs.map(x => fmt(x)).join(" / ")})` : ""} · Stabilität ${fmt(r.throughput.dl.stability * 100)}%
+      &nbsp;|&nbsp; ↑ <b>${fmt(r.throughput.ul.mbps)}</b> Mbit/s${(r.throughput.ul.runs || []).length > 1 ? ` (Läufe ${r.throughput.ul.runs.map(x => fmt(x)).join(" / ")})` : ""} · Stabilität ${fmt(r.throughput.ul.stability * 100)}%
+      <span class="muted">· 100% = gleichmäßig, niedrig = Einbrüche (eine Sekunde ohne Daten)</span></div>` : ""}
     <div class="scroll"><table><thead><tr><th class="l">Land</th><th>Median</th><th>Loss</th><th class="l">Ziele (ms)</th></tr></thead><tbody>` +
     Object.entries(r.matrix || {}).sort().map(([c, m]) => `<tr><td class="l">${c}</td><td style="${colorRtt(m.median)}">${fmt(m.median)}</td><td>${fmt(m.loss * 100)}%</td><td class="l muted small">${Object.entries(m.targets).map(([h, t]) => `${esc(h.replace(/^www\./, ""))} ${fmt(t.median)}`).join(" · ")}</td></tr>`).join("") + `</tbody></table></div>`;
+  if ((r.events || []).length) h += `<h3 style="margin:16px 0 6px;font-size:13px">Diagnose</h3><div class="scroll"><table><tbody>` +
+    r.events.map(x => `<tr><td class="muted" style="width:60px">${fmt(x.t, 1)} s</td><td class="l" style="white-space:normal">${esc(x.msg)}</td></tr>`).join("") + `</tbody></table></div>`;
   $("dlgBody").innerHTML = h; $("dlg").showModal();
 }
 $("dlgClose").onclick = () => $("dlg").close();

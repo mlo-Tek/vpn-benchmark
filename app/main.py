@@ -21,6 +21,7 @@ class RunRequest(BaseModel):
     topn: int = 10
     selected: list[str] | None = None
     providers: list[str] | None = None
+    tp_runs: int = 1  # throughput repeats per direction (median)
 
 
 class Settings(BaseModel):
@@ -70,7 +71,7 @@ async def start(req: RunRequest):
     if req.mode not in ("peering", "standard", "full"):
         raise HTTPException(400, "bad mode")
     runner.start(req.mode, max(1, min(req.parallel, 32)), max(1, req.topn),
-                 req.selected, req.providers)
+                 req.selected, req.providers, max(1, min(req.tp_runs, 5)))
     return {"started": True}
 
 
@@ -110,6 +111,14 @@ def run_detail(run_id: int):
     if not run:
         raise HTTPException(404)
     return scored(run)
+
+
+@app.get("/api/runs/{run_id}/log")
+def run_log(run_id: int):
+    run = db.get_run(run_id)
+    if not run:
+        raise HTTPException(404)
+    return PlainTextResponse(run["log"] or "(kein Log gespeichert)")
 
 
 @app.get("/api/runs/{run_id}/csv")

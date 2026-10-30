@@ -9,7 +9,7 @@ import yaml
 
 from . import db, scoring
 from .configs import cid, list_paths, provider  # noqa: F401  (re-exported for main/tests)
-from .netns import Tunnel, TunnelError, run
+from .netns import IGNORE_V6, Tunnel, TunnelError, run
 
 WORKER = str(Path(__file__).with_name("worker.py"))
 BUNDLED_TARGETS = Path(__file__).with_name("targets.yaml")
@@ -23,7 +23,7 @@ GATE.set()
 
 
 def log(msg):
-    STATE["log"] = (STATE["log"] + [f"{time.strftime('%H:%M:%S')} {msg}"])[-300:]
+    STATE["log"] = (STATE["log"] + [f"{time.strftime('%H:%M:%S')} {msg}"])[-3000:]
 
 
 def load_targets():
@@ -55,50 +55,85 @@ def set_progress(mode, p1, p2):
 
 async def test_peering(path, idx, targets):
     name = cid(path)
-    set_item(name, status="connecting", stage="Tunnel aufbauen", t0=time.time())
-    result = {}
+    t0 = time.time()
+    set_item(name, status="connecting", stage="Tunnel aufbauen", t0=t0)
+    result, events = {}, []
     t = None
+
+    def ev(msg):
+        events.append({"t": round(time.time() - t0, 2), "msg": msg})
+
     try:
         t = Tunnel(path, idx)
+        ev(f"Tunnel aufbauen, Endpoint {t.conf['peer']['endpoint']}"
+           + (" (nur IPv4)" if IGNORE_V6 else ""))
         await t.up()
         set_item(name, stage="Handshake")
         result["handshake_s"] = round(await t.wait_handshake(), 2)
+        ev(f"Handshake nach {result['handshake_s']} s"
+           + (" (WireGuard hat nach 5 s wiederholt: erstes Paket ging verloren)"
+              if result["handshake_s"] >= 4.5 else ""))
         set_item(name, status="peering", stage="MTU + Exit-Info")
         result["mtu_ok"] = await t.mtu_ok()
-        info_task = asyncio.ensure_future(t.worker("info", {}))
+        ev("MTU 1420: " + ("ok" if result["mtu_ok"] else "Pakete werden fragmentiert/verworfen"))
+        info_task = asyncio.ensure_future(t.worker("info", {"skip_v6": IGNORE_V6}))
         set_item(name, stage="Peer-Länder messen")
         matrix = await t.worker("matrix", {"targets": targets})
+        reached = sum(1 for m in matrix if m["median"] is not None)
+        ev(f"Peer-Ziele erreicht: {reached}/{len(matrix)}")
         info = await info_task
         set_item(name, stage="Swarm-Test (100 Verbindungen)")
         sw = await t.worker("swarm", {"targets": targets, "total": 100})
+        ev(f"Swarm: {round(sw['success'] * 100)}% der 100 Verbindungen erfolgreich")
         result.update(exit={k: info.get(k) for k in ("ip", "country", "city", "org")},
                       ipv6=info.get("ipv6"), dns_ok=info.get("dns_ok"),
                       dns_ms=info.get("dns_ms"), matrix=scoring.country_stats(matrix),
                       swarm=sw)
+        result["wg"] = await t.wg_stats()
+        ev(f"WireGuard-Zähler: {result['wg']['tx']} B gesendet, {result['wg']['rx']} B empfangen")
+        if reached == 0 and sw["success"] == 0:
+            result["error"] = (
+                "Handshake ok, aber kein Datenverkehr durch den Tunnel. Der Server nimmt die "
+                "Verbindung an, leitet aber nichts weiter (Exit defekt/überlastet, oder die "
+                "Config wird gleichzeitig woanders benutzt).")
+            raise TunnelError(result["error"])
         set_item(name, status="peering done", stage="Peering fertig", t1=time.time())
+        avg_rtt = [m["median"] for m in matrix if m["median"] is not None]
+        log(f"{name}: OK, Handshake {result['handshake_s']} s, Ø "
+            f"{round(sum(avg_rtt) / len(avg_rtt))} ms, Swarm {round(sw['success'] * 100)}%")
     except Exception as e:  # noqa: BLE001
-        result["error"] = str(e) or type(e).__name__
+        result["error"] = result.get("error") or str(e) or type(e).__name__
+        ev(f"FEHLER: {result['error']}")
         set_item(name, status="failed", stage=result["error"][:120], t1=time.time())
-        log(f"{name}: {result['error']}")
+        log(f"{name}: FEHLER {result['error']}")
+        if t and t.pid and "wg" not in result:
+            try:
+                result["wg"] = await t.wg_stats()
+                ev(f"WireGuard-Zähler: {result['wg']['tx']} B gesendet, "
+                   f"{result['wg']['rx']} B empfangen")
+            except Exception:  # noqa: BLE001
+                pass
     finally:
         if t:
             await t.down()
+        result["events"] = events
     return result
 
 
-async def test_throughput(path, idx, duration):
+async def test_throughput(path, idx, duration, repeats=1):
     t = Tunnel(path, idx)
     try:
         await t.up()
         await t.wait_handshake()
-        return await t.worker("throughput", {"duration": duration}, timeout=duration * 2 + 30)
+        return await t.worker("throughput", {"duration": duration, "repeats": repeats},
+                              timeout=duration * 2 * repeats + 40)
     finally:
         await t.down()
 
 
-def start(mode, parallel, topn, selected=None, providers=None):
+def start(mode, parallel, topn, selected=None, providers=None, tp_runs=1):
     global TASK
-    TASK = asyncio.create_task(run_benchmark(mode, parallel, topn, selected, providers))
+    TASK = asyncio.create_task(run_benchmark(mode, parallel, topn, selected, providers, tp_runs))
 
 
 def pause():
@@ -124,7 +159,7 @@ def stop():
     return False
 
 
-async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
+async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_runs=1):
     """mode: peering | standard | full"""
     STATE.update(running=True, mode=mode, phase="baseline", items={}, log=[],
                  started=time.time(), progress=0, total=0, done=0, paused=False)
@@ -139,7 +174,8 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
         STATE["total"] = len(configs)
         for p in configs:
             set_item(cid(p), status="queued", stage="wartet")
-        log(f"{len(configs)} Configs, Modus '{mode}', {parallel} parallel")
+        log(f"{len(configs)} Configs, Modus '{mode}', {parallel} parallel, "
+            f"Durchsatz {tp_runs}x pro Richtung" + (", nur IPv4" if IGNORE_V6 else ""))
         targets = load_targets()
         weights = db.get_setting("weights", scoring.DEFAULT_WEIGHTS)
 
@@ -148,7 +184,9 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
             m = await host_worker("matrix", {"targets": targets})
             baseline["matrix"] = scoring.country_stats(m)
             if mode != "peering":
-                baseline.update(await host_worker("throughput", {"duration": 8}, timeout=60))
+                baseline.update(await host_worker(
+                    "throughput", {"duration": 8, "repeats": tp_runs}, timeout=40 + 20 * tp_runs))
+                log(f"Baseline: ↓ {round(baseline['dl']['mbps'])} / ↑ {round(baseline['ul']['mbps'])} Mbit/s")
         except Exception as e:  # noqa: BLE001
             log(f"Baseline fehlgeschlagen: {e}")
         set_progress(mode, 0, 0)
@@ -179,7 +217,9 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
                 await GATE.wait()
                 set_item(cid(p), status="throughput", stage="Download/Upload messen", t1=None)
                 try:
-                    results[cid(p)]["throughput"] = await test_throughput(p, 0, 8)
+                    results[cid(p)]["throughput"] = tp = await test_throughput(p, 0, 8, tp_runs)
+                    log(f"{cid(p)}: ↓ {round(tp['dl']['mbps'])} / ↑ {round(tp['ul']['mbps'])} Mbit/s"
+                        + (f" (Läufe ↓ {tp['dl']['runs']})" if tp_runs > 1 else ""))
                     db.save_result(run_id, cid(p), results[cid(p)])
                     set_item(cid(p), status="done", stage="fertig", t1=time.time())
                 except Exception as e:  # noqa: BLE001
@@ -198,7 +238,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
         log(f"Lauf abgebrochen: {e}")
         status = "failed"
     finally:
-        db.finish_run(run_id, baseline, status)
         GATE.set()
-        STATE.update(running=False, phase="idle", paused=False)
         log("Fertig" if status == "done" else f"Beendet ({status})")
+        db.finish_run(run_id, baseline, status, "\n".join(STATE["log"]))
+        STATE.update(running=False, phase="idle", paused=False)
