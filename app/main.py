@@ -1,10 +1,15 @@
 import asyncio
+import base64
+import binascii
 import csv
+import hmac
 import io
+import math
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, PlainTextResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -13,6 +18,35 @@ from . import db, history, runner, scoring, version
 
 app = FastAPI(title="VPN Benchmark")
 STATIC = Path(__file__).with_name("static")
+
+
+@app.middleware("http")
+async def optional_basic_auth(request: Request, call_next):
+    """Defense in depth; bind to 127.0.0.1 in Compose even when auth is enabled."""
+    user = os.environ.get("VPN_BENCHMARK_USER", "")
+    password = os.environ.get("VPN_BENCHMARK_PASSWORD", "")
+    if bool(user) != bool(password):
+        return JSONResponse({"detail": "Set both VPN_BENCHMARK_USER and VPN_BENCHMARK_PASSWORD"},
+                            status_code=503)
+    if user and request.url.path != "/healthz":
+        auth = request.headers.get("authorization", "")
+        try:
+            scheme, token = auth.split(" ", 1)
+            decoded = base64.b64decode(token, validate=True).decode("utf-8")
+            got_user, got_password = decoded.split(":", 1)
+            valid = (scheme.lower() == "basic"
+                     and hmac.compare_digest(got_user, user)
+                     and hmac.compare_digest(got_password, password))
+        except (ValueError, UnicodeError, binascii.Error):
+            valid = False
+        if not valid:
+            return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="VPN Benchmark"'})
+    return await call_next(request)
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
 
 
 class RunRequest(BaseModel):
@@ -27,14 +61,17 @@ class RunRequest(BaseModel):
 
 class Settings(BaseModel):
     weights: dict[str, float]
+    profile: str | None = None
 
 
 def scored(run):
     weights = db.get_setting("weights", scoring.DEFAULT_WEIGHTS)
+    profile = db.get_setting("profile", scoring.DEFAULT_PROFILE)
     base = run.get("baseline") or {}
     for r in run["results"]:
-        r["score"] = scoring.score(r, weights, base)
-    run["results"].sort(key=lambda r: -r["score"]["total"])
+        r["score"] = scoring.score(r, weights, base, profile)
+    # Separate finalist tier from provisional peering-only measurements.
+    run["results"].sort(key=lambda r: (r["score"]["coverage"] == "full", r["score"]["total"]), reverse=True)
     return run
 
 
@@ -67,7 +104,7 @@ def delete_config(id: str):
 
 @app.post("/api/run")
 async def start(req: RunRequest):
-    if runner.STATE["running"]:
+    if runner.STATE["running"] or (runner.TASK and not runner.TASK.done()):
         raise HTTPException(409, "es läuft bereits ein Test")
     if req.mode not in ("peering", "standard", "full"):
         raise HTTPException(400, "bad mode")
@@ -138,7 +175,8 @@ def delete_result(run_id: int, name: str):
 @app.get("/api/history")
 def get_history():
     runs = [db.get_run(r["id"]) for r in reversed(db.list_runs())]
-    return history.build([r for r in runs if r], db.get_setting("weights", scoring.DEFAULT_WEIGHTS))
+    return history.build([r for r in runs if r], db.get_setting("weights", scoring.DEFAULT_WEIGHTS),
+                         db.get_setting("profile", scoring.DEFAULT_PROFILE))
 
 
 @app.get("/api/runs/{run_id}/log")
@@ -176,12 +214,21 @@ def run_csv(run_id: int):
 
 @app.get("/api/settings")
 def get_settings():
-    return {"weights": db.get_setting("weights", scoring.DEFAULT_WEIGHTS)}
+    return {"weights": db.get_setting("weights", scoring.DEFAULT_WEIGHTS),
+            "profile": db.get_setting("profile", scoring.DEFAULT_PROFILE)}
 
 
 @app.put("/api/settings")
 def put_settings(s: Settings):
+    if (not s.weights or
+        any(not math.isfinite(v) or v < 0 or v > 100 for v in s.weights.values()) or
+        not any(s.weights.values())):
+        raise HTTPException(400, "weights must contain finite non-negative values and at least one positive entry")
+    if s.profile is not None and s.profile not in scoring.PROFILES:
+        raise HTTPException(400, "unknown ranking profile")
     db.set_setting("weights", s.weights)
+    if s.profile is not None:
+        db.set_setting("profile", s.profile)
     return {"ok": True}
 
 
