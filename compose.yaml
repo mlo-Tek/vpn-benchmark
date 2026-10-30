@@ -2,26 +2,33 @@ services:
   vpn-benchmark:
     image: ghcr.io/mlo-tek/vpn-benchmark:latest
     container_name: vpn-benchmark
-    hostname: vpn-benchmark
+    init: true
+    restart: unless-stopped
     ports:
-      - "192.168.1.6:8765:8080/tcp"   # nur IPv4 (kein IPv6)
+      # Secure default: reachable on the Docker host only (use an SSH tunnel).
+      - "${VPN_BENCHMARK_BIND:-127.0.0.1}:${VPN_BENCHMARK_PORT:-8765}:8080"
     cap_add:
+      # Required for WireGuard interfaces and isolated network/mount namespaces.
       - NET_ADMIN
       - SYS_ADMIN
-    sysctls:
-      - net.ipv6.conf.all.disable_ipv6=1
     devices:
       - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
     environment:
-      - PUID=99
-      - PGID=100
-      - UMASK=002
-      - TZ=Europe/Berlin
-      - GITHUB_TOKEN=               # optional: fine-grained, read-only Contents (für den Update-Check)
+      TZ: ${TZ:-Europe/Berlin}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      IGNORE_IPV6: "1"
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      VPN_BENCHMARK_USER: ${VPN_BENCHMARK_USER:-}
+      VPN_BENCHMARK_PASSWORD: ${VPN_BENCHMARK_PASSWORD:-}
     volumes:
-      - /mnt/cache/appdata/vpn-benchmark/configs:/configs:rw             # geändert: war ro (Upload aus der Oberfläche)
-      - /mnt/cache/appdata/vpn-benchmark/data:/data:rw
-    labels:
-      net.unraid.docker.icon: https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/wireguard.png
-      net.unraid.docker.webui: http://192.168.1.6:8765
-    restart: unless-stopped
+      - ./configs:/configs:rw
+      - ./data:/data:rw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 15s

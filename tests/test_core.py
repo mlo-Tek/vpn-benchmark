@@ -211,3 +211,127 @@ def test_region_throughput_changes_score_and_worst_region_counts():
     # a broken baseline (2 Mbit/s) must not blow up the score: fall back to own measurement
     s = scoring.score(res(180), scoring.DEFAULT_WEIGHTS, {"dl": {"mbps": 2}, "ul": {"mbps": 2}})
     assert 0 < s["total"] <= 100
+
+
+def test_seeding_ranking_prioritizes_upload():
+    from app import scoring
+    matrix = scoring.country_stats([{"country": "DE", "host": "x", "median": 20, "loss": 0, "jitter": 0}])
+    base = {"dl": {"mbps": 500}, "ul": {"mbps": 200}}
+
+    def result(dl, ul):
+        return {"matrix": matrix, "swarm": {"success": 1}, "handshake_s": 0.2, "mtu_ok": True,
+                "throughput": {"dl": {"mbps": dl, "stability": 1},
+                               "ul": {"mbps": ul, "stability": 1}}}
+
+    download_fast = result(400, 40)
+    upload_fast = result(200, 150)
+    assert scoring.score(download_fast, scoring.DEFAULT_WEIGHTS, base, "balanced")["total"] > (
+        scoring.score(upload_fast, scoring.DEFAULT_WEIGHTS, base, "balanced")["total"])
+    assert scoring.score(upload_fast, scoring.DEFAULT_WEIGHTS, base, "seeding")["total"] > (
+        scoring.score(download_fast, scoring.DEFAULT_WEIGHTS, base, "seeding")["total"])
+
+
+def test_scoring_distinguishes_coverage():
+    from app import scoring
+    m = scoring.country_stats([{"country": "DE", "host": "x", "median": 10, "loss": 0, "jitter": 0}])
+    simple = {"matrix": m, "swarm": {"success": 1}, "handshake_s": 0.1, "mtu_ok": True}
+    assert scoring.score(simple, scoring.DEFAULT_WEIGHTS)["coverage"] == "peering"
+    full = {**simple, "throughput": {"dl": {"mbps": 300, "stability": 1},
+                                      "ul": {"mbps": 100, "stability": 1}}}
+    assert scoring.score(full, scoring.DEFAULT_WEIGHTS)["coverage"] == "full"
+    assert scoring.score({"error": "failed"}, scoring.DEFAULT_WEIGHTS)["coverage"] == "failed"
+
+
+def test_api_ranks_full_measurement_before_provisional(tmp_path, monkeypatch):
+    from app import db, main
+    monkeypatch.setattr(db, "DATA", tmp_path)
+    rid = db.new_run("standard")
+    m = scoring.country_stats([{"country": "DE", "host": "x", "median": 10, "loss": 0, "jitter": 0}])
+    p = {"matrix": m, "swarm": {"success": 1}, "handshake_s": 0.1, "mtu_ok": True}
+    db.save_result(rid, "a/peering", p)
+    db.save_result(rid, "b/full", {**p, "throughput": {
+        "dl": {"mbps": 20, "stability": 0.2}, "ul": {"mbps": 20, "stability": 0.2}}})
+    data = main.scored(db.get_run(rid))
+    assert [r["name"] for r in data["results"]] == ["b/full", "a/peering"]
+
+
+def test_api_basic_auth_and_healthcheck(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    monkeypatch.setenv("VPN_BENCHMARK_USER", "tester")
+    monkeypatch.setenv("VPN_BENCHMARK_PASSWORD", "long-secret")
+    with TestClient(app) as client:
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/api/status").status_code == 401
+        assert client.get("/api/status", auth=("tester", "wrong")).status_code == 401
+        assert client.get("/api/status", auth=("tester", "long-secret")).status_code == 200
+        monkeypatch.delenv("VPN_BENCHMARK_PASSWORD")
+        assert client.get("/api/status").status_code == 503
+
+
+def test_profile_settings_validate_input(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import db
+    from app.main import app
+    monkeypatch.setattr(db, "DATA", tmp_path)
+    monkeypatch.delenv("VPN_BENCHMARK_USER", raising=False)
+    monkeypatch.delenv("VPN_BENCHMARK_PASSWORD", raising=False)
+    with TestClient(app) as client:
+        assert client.put("/api/settings", json={"weights": {"DE": 1}, "profile": "seeding"}).status_code == 200
+        assert client.get("/api/settings").json()["profile"] == "seeding"
+        assert client.put("/api/settings", json={"weights": {"DE": 1}, "profile": "invalid"}).status_code == 400
+        assert client.put("/api/settings", json={"weights": {"DE": -1}}).status_code == 400
+        assert client.put("/api/settings", json={"weights": {"DE": 0}}).status_code == 400
+
+
+def test_optional_bittorrent_peer_config(tmp_path, monkeypatch):
+    from app import db, runner
+    monkeypatch.setattr(db, "DATA", tmp_path)
+    assert runner.list_bittorrent_peers() == []
+    (tmp_path / "bittorrent.yaml").write_text(
+        "peers:\n  - host: 127.0.0.1\n    port: 51413\n    infohash: '" + "ab" * 20 + "'\n")
+    peers = runner.list_bittorrent_peers()
+    assert len(peers) == 1 and peers[0]["port"] == 51413
+    (tmp_path / "bittorrent.yaml").write_text(
+        "peers:\n  - host: 127.0.0.1\n    port: 99999\n    infohash: '" + "ab" * 20 + "'\n")
+    with pytest.raises(ValueError):
+        runner.list_bittorrent_peers()
+
+
+def test_real_bittorrent_handshake_against_local_fixture():
+    import asyncio
+    from app.worker import bittorrent
+
+    async def exercise():
+        async def peer(reader, writer):
+            handshake = await reader.readexactly(68)
+            writer.write(handshake)
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(peer, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            result = await bittorrent({"peers": [{
+                "host": "127.0.0.1", "port": port, "infohash": "ab" * 20}]})
+            assert result["success"] == 1.0
+            assert result["total"] == 1
+            assert result["results"][0]["ok"]
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(exercise())
+
+
+def test_zero_weight_country_not_counted_as_worst():
+    from app import scoring
+    matrix = scoring.country_stats([
+        {"country": "DE", "host": "x", "median": 10, "loss": 0, "jitter": 0},
+        {"country": "NO", "host": "y", "median": None, "loss": 1, "jitter": 0},
+    ])
+    r = {"matrix": matrix, "swarm": {"success": 1}, "handshake_s": 0.1, "mtu_ok": True}
+    only_de = {**r, "matrix": {"DE": matrix["DE"]}}
+    weights = {"DE": 1, "NO": 0}
+    assert scoring.score(r, weights)["peering"] == scoring.score(only_de, weights)["peering"]

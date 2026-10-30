@@ -223,11 +223,18 @@
     <h2>Version &amp; Updates</h2>
     <div id="verBox" class="muted">…</div>
     <div class="row" style="margin-top:10px"><button class="btn" id="recheck">Jetzt prüfen</button></div>
-    <div class="small muted" style="margin-top:10px">Aktualisieren auf dem Unraid: <code>cd /mnt/cache/compose/vpn-benchmark &amp;&amp; docker compose pull &amp;&amp; docker compose up -d</code><br>
-      Der Check braucht für das private Repo ein <code>GITHUB_TOKEN</code> (fine-grained, nur lesen: Contents) in der compose.yaml.</div>
+    <div class="small muted" style="margin-top:10px">Aktualisieren mit Docker Compose: <code>docker compose pull &amp;&amp; docker compose up -d</code>.
+      Für den Update-Check des privaten Repositories optional <code>GITHUB_TOKEN</code> in der lokalen <code>.env</code> hinterlegen (nur Leserechte).</div>
   </div>
   <div class="card">
-    <h2>Länder-Gewichte (Anteil deiner Peers)</h2>
+    <h2>Ranking-Profil &amp; Länder-Gewichte</h2>
+    <div class="row" style="margin-bottom:12px">
+      <label class="f">Profil <select id="rankProfile">
+        <option value="seeding">Seeding (Upload priorisiert)</option>
+        <option value="balanced">Ausgewogen (Down-/Upload)</option>
+      </select></label>
+      <span class="muted small">Die Bewertung lässt sich auch für gespeicherte Läufe neu berechnen. Ein TCP-Swarm-Test ist kein echter BitTorrent-Peer-Test.</span>
+    </div>
     <div class="row" id="weights"></div>
     <div class="row" style="margin-top:12px"><button class="btn primary" id="saveW">Speichern</button>
       <span class="muted small">Höhere Gewichte für Länder, in denen viele deiner Peers sitzen. Die Rangliste rechnet sich sofort neu, auch für alte Läufe.</span></div>
@@ -445,11 +452,14 @@ function renderResults() {
   const baseAvg = avg(Object.values(base.matrix || {}), m => m.median);
   let h = "";
 
-  // podium
-  h += `<div class="podium">` + ok.slice(0, 3).map((r, i) => { const e = r.exit || {};
+  // Peering-only scores are provisional and cannot outrank fully measured finalists.
+  const finalists = ok.filter(r => r.score.coverage === "full");
+  const podium = finalists.length ? finalists : ok;
+  if (finalists.length && finalists.length < ok.length) h += `<div class="card hint">Ranking: Zuerst vollständig gemessene Finalisten; übrige Ergebnisse sind nur vorläufige Peering-Scores. Diese Scores sind nicht direkt miteinander vergleichbar.</div>`;
+  h += `<div class="podium">` + podium.slice(0, 3).map((r, i) => { const e = r.exit || {};
     return `<div class="pod ${i === 0 ? "first" : ""}" data-n="${esc(r.name)}"><span class="rank">PLATZ ${i + 1}</span>${ring(r.score.total)}
       <div style="min-width:0"><h3 title="${esc(r.name)}">${esc(shortName(r.name))}</h3><div class="muted small">${esc(provOf(r.name))} · Exit ${esc(e.city || "")} ${esc(e.country || "")}</div>
-      <div class="facts"><span>Ø Latenz</span><b>${fmt(avgRtt(r))} ms</b><span>Swarm</span><b>${fmt((r.swarm?.success || 0) * 100)}%</b><span>Download</span><b>${r.throughput ? fmt(r.throughput.dl.mbps) + " Mbit/s" : "–"}</b><span>Upload</span><b>${r.throughput ? fmt(r.throughput.ul.mbps) + " Mbit/s" : "–"}</b><span>Handshake</span><b>${fmt(r.handshake_s, 2)} s</b>${weakest(r)}</div></div></div>`; }).join("") + `</div>`;
+      <div class="facts"><span>Ø Latenz</span><b>${fmt(avgRtt(r))} ms</b><span>TCP-Swarm</span><b>${fmt((r.swarm?.success || 0) * 100)}%</b><span>Download</span><b>${r.throughput ? fmt(r.throughput.dl.mbps) + " Mbit/s" : "–"}</b><span>Upload</span><b>${r.throughput ? fmt(r.throughput.ul.mbps) + " Mbit/s" : "–"}</b><span>Handshake</span><b>${fmt(r.handshake_s, 2)} s</b>${weakest(r)}</div></div></div>`; }).join("") + `</div>`;
 
   // stats
   const bestRtt = best(ok, avgRtt), bestDl = best(ok, r => r.throughput?.dl.mbps, -1), bestUl = best(ok, r => r.throughput?.ul.mbps, -1);
@@ -458,7 +468,7 @@ function renderResults() {
     <div class="stat"><div class="l">Niedrigste Ø-Latenz</div><div class="v">${bestRtt ? fmt(avgRtt(bestRtt)) + " ms" : "–"}</div><div class="small muted">${esc(bestRtt ? shortName(bestRtt.name) : "")}${baseAvg != null ? ` · ohne VPN ${fmt(baseAvg)} ms` : ""}</div></div>
     <div class="stat"><div class="l">Schnellster Download</div><div class="v">${bestDl ? fmt(bestDl.throughput.dl.mbps) : "–"}<span class="small muted"> Mbit/s</span></div><div class="small muted">${esc(bestDl ? shortName(bestDl.name) : "nicht gemessen")}${base.dl ? ` · ohne VPN ${fmt(base.dl.mbps)}` : ""}</div></div>
     <div class="stat"><div class="l">Schnellster Upload</div><div class="v">${bestUl ? fmt(bestUl.throughput.ul.mbps) : "–"}<span class="small muted"> Mbit/s</span></div><div class="small muted">${esc(bestUl ? shortName(bestUl.name) : "nicht gemessen")}${base.ul ? ` · ohne VPN ${fmt(base.ul.mbps)}` : ""}</div></div>
-    <div class="stat"><div class="l">Ø Swarm-Erfolg</div><div class="v">${fmt(avg(ok, r => (r.swarm?.success || 0) * 100))}%</div><div class="small muted">100 parallele Verbindungen</div></div></div>`;
+    <div class="stat"><div class="l">Ø TCP-Swarm-Erfolg</div><div class="v">${fmt(avg(ok, r => (r.swarm?.success || 0) * 100))}%</div><div class="small muted">100 parallele Verbindungen</div></div></div>`;
 
   // best per country
   h += `<div class="card"><h2>Bester Exit pro Peer-Land</h2><div class="bests">` + countries.map(c => { const b = best(ok, r => r.matrix?.[c]?.median), bm = base.matrix?.[c]?.median;
@@ -470,7 +480,7 @@ function renderResults() {
       <div class="hint">Heller Balken = Upload, der senkrechte Strich = was deine Leitung ohne VPN schafft. Je näher am Strich, desto weniger bremst das VPN.</div>${tpChart(ok, base)}</div>
     <div class="card"><h2>Latenz-Aufschlag durch das VPN</h2>
       <div class="hint">Wie viele Millisekunden länger die Verbindungen zu deinen Peer-Ländern im Schnitt dauern als ohne VPN${baseAvg != null ? ` (ohne VPN: ${fmt(baseAvg)} ms)` : ""}. Kürzer ist besser.</div>${latChart(ok, baseAvg)}</div></div>`;
-  if (Object.keys(byP).length > 1) h += `<div class="card"><h2>Anbieter im Vergleich</h2><table><thead><tr><th class="l">Anbieter</th><th>Configs</th><th>Ø Score</th><th>Ø Latenz</th><th>Ø Swarm</th><th>Ø ↓</th><th>Ø ↑</th></tr></thead><tbody>` +
+  if (Object.keys(byP).length > 1) h += `<div class="card"><h2>Anbieter im Vergleich</h2><table><thead><tr><th class="l">Anbieter</th><th>Configs</th><th>Ø Score</th><th>Ø Latenz</th><th>Ø TCP-Swarm</th><th>Ø ↓</th><th>Ø ↑</th></tr></thead><tbody>` +
     Object.entries(byP).sort((a, b) => avg(b[1], r => r.score.total) - avg(a[1], r => r.score.total)).map(([p, rs]) =>
       `<tr><td class="l"><span style="color:${pcolor(p)}">●</span> ${esc(p)}</td><td>${rs.length}</td><td><b style="color:${scoreColor(avg(rs, r => r.score.total))}">${fmt(avg(rs, r => r.score.total), 1)}</b></td><td>${fmt(avg(rs, avgRtt))} ms</td><td>${fmt(avg(rs, r => (r.swarm?.success || 0) * 100))}%</td><td>${fmt(avg(rs, r => r.throughput?.dl.mbps))}</td><td>${fmt(avg(rs, r => r.throughput?.ul.mbps))}</td></tr>`).join("") + `</tbody></table></div>`;
 
@@ -486,7 +496,7 @@ function renderResults() {
     <select id="hmProv"><option value="">Alle Anbieter</option>${Object.keys(byP).map(p => `<option ${p === hmProv ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
     <select id="hmTop"><option value="0">Alle</option><option value="10" ${hmTop === 10 ? "selected" : ""}>Top 10</option><option value="20" ${hmTop === 20 ? "selected" : ""}>Top 20</option></select>
     <select id="hmMode"><option value="ms">Latenz in ms</option><option value="delta" ${hmMode === "delta" ? "selected" : ""}>Latenz: Δ zur Baseline</option><option value="down" ${hmMode === "down" ? "selected" : ""}>Download pro Land (Mbit/s)</option><option value="up" ${hmMode === "up" ? "selected" : ""}>Upload pro Land (Mbit/s)</option></select></div>
-    <div class="scroll"><table class="hm"><thead><tr>${th("name", "Config")}${th("score", "Score")}` + countries.map(c => th(c, c)).join("") + th("avg", "Ø ms") + th("swarm", "Swarm") + th("hs", "HS s") + th("dl", "↓") + th("ul", "↑") + `</tr></thead><tbody>`;
+    <div class="scroll"><table class="hm"><thead><tr>${th("name", "Config")}${th("score", "Score")}` + countries.map(c => th(c, c)).join("") + th("avg", "Ø ms") + th("swarm", "TCP-Swarm") + th("hs", "HS s") + th("dl", "↓") + th("ul", "↑") + `</tr></thead><tbody>`;
   if (Object.keys(base.matrix || {}).length) h += `<tr class="muted"><td class="l">Baseline (ohne VPN)</td><td></td>${countries.map(c => `<td class="c">${hmMode === "down" || hmMode === "up" ? "" : fmt(base.matrix[c]?.median)}</td>`).join("")}<td class="c">${fmt(baseAvg)}</td><td></td><td></td><td>${fmt(base.dl?.mbps)}</td><td>${fmt(base.ul?.mbps)}</td></tr>`;
   for (const r of rows) {
     if (r.error) { h += `<tr class="click" data-n="${esc(r.name)}"><td class="l">${esc(r.name)}</td><td colspan="${countries.length + 6}" class="l"><span class="chip bad">Fehler</span> <span class="muted small">${esc(r.error)}</span></td></tr>`; continue; }
@@ -512,9 +522,10 @@ $("resBody").onclick = e => {
 function detail(name) {
   const r = current.results.find(x => x.name === name); if (!r) return; const e = r.exit || {}, s = r.score;
   let h = `<h3 style="margin:0 0 4px">${esc(r.name)}</h3><div class="muted small">Exit ${esc(e.ip || "–")} · ${esc(e.city || "")} ${esc(e.country || "")} · ${esc(e.org || "")}</div>`;
+  if (r.bittorrent) h += `<div class="small muted" style="margin-top:8px">Echte BitTorrent-Handshakes (optional, nur ausgehend): <b>${fmt(r.bittorrent.success * 100)}%</b> von ${r.bittorrent.total} konfigurierten Test-Peers. Keine Prüfung von Portweiterleitung oder uTP.</div>`;
   if (r.error) h += `<p><span class="chip bad">Fehler</span> ${esc(r.error)}</p>`;
   else h += `<div class="row" style="margin:14px 0;gap:18px">${ring(s.total, 96)}<div class="stats" style="flex:1;margin:0">
-      <div class="stat"><div class="l">Peering</div><div class="v">${fmt(s.peering, 0)}</div></div><div class="stat"><div class="l">Swarm</div><div class="v">${fmt(s.swarm)}%</div></div>
+      <div class="stat"><div class="l">Peering</div><div class="v">${fmt(s.peering, 0)}</div></div><div class="stat"><div class="l">TCP-Swarm</div><div class="v">${fmt(s.swarm)}%</div></div>
       <div class="stat"><div class="l">Zuverlässigkeit</div><div class="v">${fmt(s.reliability)}</div></div><div class="stat"><div class="l">Durchsatz</div><div class="v">${s.throughput == null ? "–" : fmt(s.throughput)}</div></div></div></div>
     <div class="small muted" style="margin-bottom:8px">Handshake ${fmt(r.handshake_s, 2)} s · MTU 1420 ${r.mtu_ok ? "ok" : "Fragmentierung"} · IPv6 ${r.ipv6 == null ? "aus (nur IPv4)" : r.ipv6 ? "ja" : "nein"} · DNS ${r.dns_ok ? fmt(r.dns_ms) + " ms" : "Fehler"}</div>${r.throughput ? `<div class="small" style="margin-bottom:8px">↓ <b>${fmt(r.throughput.dl.mbps)}</b> Mbit/s${(r.throughput.dl.runs || []).length > 1 ? ` (Läufe ${r.throughput.dl.runs.map(x => fmt(x)).join(" / ")})` : ""} · Stabilität ${fmt(r.throughput.dl.stability * 100)}%
       &nbsp;|&nbsp; ↑ <b>${fmt(r.throughput.ul.mbps)}</b> Mbit/s${(r.throughput.ul.runs || []).length > 1 ? ` (Läufe ${r.throughput.ul.runs.map(x => fmt(x)).join(" / ")})` : ""} · Stabilität ${fmt(r.throughput.ul.stability * 100)}%
@@ -575,7 +586,7 @@ function histDetail(name) {
   const chart = (title, key, unit, color) => `<div class="card" style="margin:0"><h2>${title}</h2>${spark(e.map(x => x[key]), 330, 70, color)}<div class="small muted">${unit}: ${e.map(x => fmt(x[key], key === "score" ? 1 : 0)).join(" → ")}</div></div>`;
   $("dlgBody").innerHTML = `<h3 style="margin:0 0 4px">${esc(name)}</h3><div class="muted small" style="margin-bottom:12px">${e.length} Läufe, älteste zuerst</div>
     <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:12px">${chart("Score", "score", "Score", "var(--accent)")}${chart("Ø Latenz", "avg_rtt", "ms", "var(--warn)")}${chart("Download", "dl", "Mbit/s", "var(--good)")}${chart("Upload", "ul", "Mbit/s", "var(--muted)")}</div>
-    <div class="scroll"><table><thead><tr><th class="l">Lauf</th><th class="l">Zeitpunkt</th><th>Score</th><th>Ø ms</th><th>Swarm</th><th>HS s</th><th>↓</th><th>↑</th></tr></thead><tbody>` +
+    <div class="scroll"><table><thead><tr><th class="l">Lauf</th><th class="l">Zeitpunkt</th><th>Score</th><th>Ø ms</th><th>TCP-Swarm</th><th>HS s</th><th>↓</th><th>↑</th></tr></thead><tbody>` +
     e.slice().reverse().map(x => `<tr><td class="l">#${x.run} <span class="muted small">${esc(x.mode)}</span></td><td class="l muted">${new Date(x.t * 1000).toLocaleString("de-DE")}</td>` +
       (x.error ? `<td colspan="6" class="l"><span class="chip bad">Fehler</span> <span class="muted small">${esc(x.error).slice(0, 90)}</span></td>` :
         `<td><b style="color:${scoreColor(x.score)}">${fmt(x.score, 1)}</b></td><td>${fmt(x.avg_rtt)}</td><td>${x.swarm == null ? "–" : fmt(x.swarm * 100) + "%"}</td><td>${fmt(x.hs, 2)}</td><td>${fmt(x.dl)}</td><td>${fmt(x.ul)}</td>`) + "</tr>").join("") + "</tbody></table></div>";
@@ -594,12 +605,13 @@ async function loadVersion(force) {
 }
 $("recheck").onclick = async () => { await loadVersion(true); toast("Update-Check aktualisiert"); };
 async function loadWeights() {
-  const w = (await api("/api/settings")).weights;
-  $("weights").innerHTML = Object.entries(w).map(([c, v]) => `<label class="f">${c}<input data-c="${c}" type="number" step="0.5" min="0" value="${v}" style="width:80px"></label>`).join("");
+  const settings = await api("/api/settings"), w = settings.weights;
+  $("rankProfile").value = settings.profile || "seeding";
+  $("weights").innerHTML = Object.entries(w).map(([c, v]) => `<label class="f">${esc(c)}<input data-c="${esc(c)}" type="number" step="0.5" min="0" value="${fmt(v,1)}" style="width:80px"></label>`).join("");
 }
 $("saveW").onclick = async () => {
   const weights = {}; $("weights").querySelectorAll("input").forEach(i => weights[i.dataset.c] = +i.value);
-  await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weights }) });
+  await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ weights, profile: $("rankProfile").value }) });
   toast("Gewichte gespeichert"); if (current) loadRun(current.id);
 };
 

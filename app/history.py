@@ -7,7 +7,7 @@ def _avg(vals):
     return sum(vals) / len(vals) if vals else None
 
 
-def build(runs, weights):
+def build(runs, weights, profile=scoring.DEFAULT_PROFILE):
     """runs: run dicts (as returned by db.get_run), oldest first -> {config: [entry, ...]}"""
     out = {}
     for run in runs:
@@ -19,7 +19,7 @@ def build(runs, weights):
                 "run": run["id"], "t": run["started"], "mode": run["mode"],
                 "provider": r.get("provider"),
                 "error": err,
-                "score": scoring.score(r, weights, base)["total"],
+                "score": scoring.score(r, weights, base, profile)["total"],
                 "avg_rtt": None if err else _avg([m["median"] for m in (r.get("matrix") or {}).values()]),
                 "swarm": None if err else (r.get("swarm") or {}).get("success"),
                 "hs": r.get("handshake_s"),
