@@ -4,10 +4,12 @@ services:
     container_name: vpn-benchmark
     hostname: vpn-benchmark
     ports:
-      - "8765:8080/tcp"
+      - "192.168.1.6:8765:8080/tcp"   # nur IPv4 (kein IPv6)
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
     devices:
       - /dev/net/tun:/dev/net/tun
     environment:
