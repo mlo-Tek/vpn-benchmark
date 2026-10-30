@@ -118,6 +118,13 @@ Die Unit-Tests decken unter anderem Parsing, Upload-Validierung, Rankings, Verla
 
 Teile des Quellcodes und der Dokumentation wurden mithilfe generativer KI-Assistenten erstellt oder überarbeitet. **KI-generierter Code kann Fehler und Sicherheitslücken enthalten.** Die Ergebnisse sind kein unabhängiger Sicherheits-Audit; insbesondere Messlogik, Netzwerkisolation und Privilegien müssen vor einem produktiven Einsatz selbst geprüft werden. Benchmark-Ergebnisse dienen als Entscheidungshilfe und sind keine Garantie für Performance, Anonymität oder Sicherheit.
 
+## Lizenz
+
+Dieses Projekt ist unter der [MIT-Lizenz](LICENSE) veröffentlicht.
+Copyright © 2026 mlo-Tek. Die Lizenz erlaubt Nutzung, Änderung und Weitergabe
+des Quellcodes, auch kommerziell, sofern der Copyright- und Lizenzhinweis
+beibehalten wird.
+
 ## Haftung und Betrieb
 
 Benutzung auf eigenes Risiko. Nur VPN-Profile und Testziele verwenden, für die eine Berechtigung besteht. Öffentliche Server fair benutzen; wiederholte Durchsatztests erzeugen beträchtlichen Datenverkehr.
