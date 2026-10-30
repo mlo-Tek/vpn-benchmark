@@ -19,6 +19,7 @@ class RunRequest(BaseModel):
     parallel: int = 8
     topn: int = 10
     selected: list[str] | None = None
+    providers: list[str] | None = None
 
 
 class Settings(BaseModel):
@@ -36,7 +37,7 @@ def scored(run):
 
 @app.get("/api/configs")
 def configs():
-    return [p.stem for p in runner.list_configs()]
+    return [{"id": runner.cid(p), "provider": runner.provider(p)} for p in runner.list_configs()]
 
 
 @app.post("/api/run")
@@ -46,7 +47,7 @@ async def start(req: RunRequest):
     if req.mode not in ("peering", "standard", "full"):
         raise HTTPException(400, "bad mode")
     asyncio.create_task(runner.run_benchmark(
-        req.mode, max(1, min(req.parallel, 32)), max(1, req.topn), req.selected))
+        req.mode, max(1, min(req.parallel, 32)), max(1, req.topn), req.selected, req.providers))
     return {"started": True}
 
 
