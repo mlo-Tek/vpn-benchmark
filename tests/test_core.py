@@ -323,3 +323,15 @@ def test_real_bittorrent_handshake_against_local_fixture():
             await server.wait_closed()
 
     asyncio.run(exercise())
+
+
+def test_zero_weight_country_not_counted_as_worst():
+    from app import scoring
+    matrix = scoring.country_stats([
+        {"country": "DE", "host": "x", "median": 10, "loss": 0, "jitter": 0},
+        {"country": "NO", "host": "y", "median": None, "loss": 1, "jitter": 0},
+    ])
+    r = {"matrix": matrix, "swarm": {"success": 1}, "handshake_s": 0.1, "mtu_ok": True}
+    only_de = {**r, "matrix": {"DE": matrix["DE"]}}
+    weights = {"DE": 1, "NO": 0}
+    assert scoring.score(r, weights)["peering"] == scoring.score(only_de, weights)["peering"]
