@@ -1,0 +1,8 @@
+# Copy to data/bittorrent.yaml and replace with peers you are allowed to test.
+# All peers must actually announce the SAME legal test torrent specified by infohash.
+# A peer can be offline at any moment; an unsuccessful handshake is not a VPN failure.
+# Do not test random hosts. No tracker search or incoming port-forward check occurs.
+peers:
+  - host: "192.0.2.10" # Replace this documentation-only address
+    port: 51413
+    infohash: "0000000000000000000000000000000000000000" # Replace with a legal torrent infohash
