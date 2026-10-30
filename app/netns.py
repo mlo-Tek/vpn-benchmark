@@ -55,7 +55,13 @@ async def run(*cmd, check=True, stdin=None):
         if check:
             raise TunnelError(f"command not found: {cmd[0]}")
         return 127, ""
-    out, err = await p.communicate(stdin.encode() if stdin is not None else None)
+    try:
+        out, err = await p.communicate(stdin.encode() if stdin is not None else None)
+    except BaseException:
+        if p.returncode is None:
+            p.kill()
+            await p.communicate()
+        raise
     if check and p.returncode:
         raise TunnelError(f"{' '.join(cmd[:4])}: {err.decode().strip() or out.decode().strip()}")
     return p.returncode, out.decode()
