@@ -75,6 +75,11 @@
   button.btn.block { width:100%; padding:10px 14px; }
   #overlay { position:fixed; inset:0; z-index:20; background:color-mix(in srgb,var(--accent) 22%,rgba(0,0,0,.45)); display:none; align-items:center; justify-content:center; font-size:22px; font-weight:700; color:#fff; pointer-events:none; }
   #overlay.on { display:flex; }
+  .ctlrow { display:flex; gap:14px; align-items:flex-end; justify-content:space-between; }
+  .ctlrow .fields { display:flex; flex-wrap:wrap; gap:12px 14px; align-items:flex-end; flex:1; min-width:0; }
+  .ctlrow .btns { display:flex; gap:6px; flex-shrink:0; align-self:flex-end; }
+  .ctlrow .btns .btn { padding:7px 16px; font-size:13px; }
+  @media (max-width:560px) { .ctlrow { flex-direction:column; align-items:stretch; } .ctlrow .btns { align-self:flex-start; } }
   .banner { padding:8px 12px; border-radius:8px; background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn); font-weight:600; margin-top:10px; }
   /* results */
   .podium { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:14px; }
@@ -134,22 +139,25 @@
 <!-- ================= START ================= -->
 <section id="t-start" class="on">
   <div class="card" id="ctl">
-    <div class="row" style="gap:14px;align-items:flex-end">
+    <div class="ctlrow">
+     <div class="fields">
       <div class="big" style="align-self:center"><span id="selN">0</span> <span class="muted" style="font-size:15px;font-weight:600">von <span id="allN">0</span> ausgewählt</span></div>
       <label class="f">Modus
-        <select id="mode" style="min-width:260px">
-          <option value="standard">Standard: Peering + Durchsatz der Top-N</option>
-          <option value="peering">Nur Peering (am schnellsten)</option>
-          <option value="full">Voll: Durchsatz für alle</option>
+        <select id="mode" title="Standard: Peering für alle, Durchsatz nur für die besten Top-N. Nur Peering: am schnellsten, ohne Durchsatz. Voll: Durchsatz für alle Configs.">
+          <option value="standard">Standard (Peering + Top-N)</option>
+          <option value="peering">Nur Peering (schnell)</option>
+          <option value="full">Voll (alle messen)</option>
         </select></label>
       <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:72px"></label>
       <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:72px"></label>
-      <label class="f">Länder-Durchsatz <select id="regionsOpt"><option value="1">an (iPerf3, ca. +1 min pro Config)</option><option value="0">aus</option></select></label>
-      <label class="f">Durchsatz-Messung <select id="tpRuns"><option value="1">1× (schnell)</option><option value="3">3× Median (genau, dauert länger)</option></select></label>
-      <span class="spacer"></span>
-      <button class="btn primary" id="start" style="padding:10px 28px">Test starten</button>
-      <button class="btn warn" id="pause" hidden style="padding:10px 22px">Pause</button>
-      <button class="btn danger" id="stop" hidden style="padding:10px 22px">Stopp</button>
+      <label class="f">Länder-Durchsatz <select id="regionsOpt" title="Download und Upload zu jedem Peer-Land per iPerf3, nur für die Top-N. Dauert etwa 1 Minute pro Config."><option value="1">an (iPerf3)</option><option value="0">aus</option></select></label>
+      <label class="f">Durchsatz <select id="tpRuns" title="3× wiederholt die Download-Messung und nimmt den Median. Das dauert länger, und öffentliche Server drosseln wiederholte Downloads teils."><option value="1">1× (schnell)</option><option value="3">3× Median (genau)</option></select></label>
+     </div>
+     <div class="btns">
+      <button class="btn primary" id="start">Test starten</button>
+      <button class="btn warn" id="pause" hidden>Pause</button>
+      <button class="btn danger" id="stop" hidden>Stopp</button>
+     </div>
     </div>
     <div id="liveBox" hidden style="margin-top:14px">
       <div class="row" style="margin-bottom:6px">
