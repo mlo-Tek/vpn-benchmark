@@ -1,130 +1,169 @@
 # VPN Benchmark
 
-Selbst gehostetes Tool zum Vergleichen von WireGuard-VPN-Exits. Es misst insbesondere Verbindungen in europäische Peer-Länder, Latenz, Paketverlust, TCP-Verbindungsrate, Handshake, MTU sowie globalen und regionalen Down-/Upload. Eine Weboberfläche zeigt Live-Fortschritt, Heatmaps, Verlauf, Diagnose und CSV-Exporte.
+VPN Benchmark ist eine selbst gehostete Webanwendung zum Vergleichen von **WireGuard-VPN-Exit-Servern**. Sie misst unter anderem Latenz, Paketverlust, TCP-Verbindungsaufbau, WireGuard-Handshake, MTU sowie Down- und Upload-Durchsatz. Die Ergebnisse lassen sich nach Peer-Ländern gewichten und in einer Weboberfläche vergleichen, speichern und als CSV exportieren.
 
-**WICHTIG: Nicht ins öffentliche Internet stellen!** Die Anwendung steuert Netzwerk-Namespaces mit erweiterten Linux-Capabilities, verwaltet WireGuard-Konfigurationen mit privaten Schlüsseln und kann ressourcenintensive Tests auslösen. Sie ist für den eigenen, vertrauenswürdigen Rechner beziehungsweise ein abgeschottetes privates Netz gedacht. Auch eine aktivierte HTTP-Basic-Authentifizierung macht einen direkten Internetzugang nicht sicher.
+> [!CAUTION]
+> **SICHERHEIT – NICHT ÖFFENTLICH INS INTERNET STELLEN.** Die Anwendung verarbeitet WireGuard-Konfigurationen mit **privaten Schlüsseln** und benötigt Linux-Capabilities wie `NET_ADMIN` und `SYS_ADMIN`. **Keine öffentlichen Portfreigaben, kein öffentlich erreichbarer Reverse Proxy und kein offenes Ingress.** Die Standardkonfiguration bindet den Web-Port ausschließlich an `127.0.0.1` auf dem Docker-Host. Ein optionales HTTP-Basic-Passwort ersetzt weder TLS noch Netzwerkisolation.
+
+> [!IMPORTANT]
+> **KI-/AI-OFFENLEGUNG:** Wesentliche Teile dieses Projekts wurden mit Unterstützung **generativer KI** entwickelt und überarbeitet – einschließlich Python-Code, Mess- und Rankinglogik, Benutzeroberfläche, Docker-/CI-Konfiguration sowie Dokumentation. **Die Anwendung ist nicht unabhängig sicherheitsauditiert.** Auch bestandene automatisierte Tests schließen Fehler, Sicherheitslücken und ungenaue Messwerte nicht aus. Siehe [KI-Einsatz und Grenzen](#ki-einsatz-und-grenzen).
+
+## Funktionen
+
+- Mehrere WireGuard-Konfigurationen vergleichen, einschließlich Ordnerstruktur nach VPN-Anbieter.
+- Pro Konfiguration isolierte Linux-Netzwerk-Namespaces und parallele Peering-Tests.
+- Ziele in **NO, NL, DE, SE, CH, FI, DK und PL**: TCP-Verbindungszeiten und Ausfallraten.
+- 100 parallele TCP-Verbindungsversuche zu Webhosts als synthetischer **TCP-Swarm-Test**.
+- HTTPS-Down-/Uploadtests und optionale regionale iPerf3-Messungen.
+- Wahl zwischen **Seeding** (uploadorientiert) und **Ausgewogen** als Ranking-Profil.
+- Optional echte, *ausgehende* BitTorrent-Protokoll-Handshakes mit selbst angegebenen Test-Peers.
+- Live-Status, Verlaufsdaten, Ländergewichtung, Diagnosen und CSV-Export.
 
 ## Voraussetzungen
 
-- Linux-Host mit aktuellem Docker Engine und Docker Compose v2
-- WireGuard-Unterstützung im Linux-Kernel, /dev/net/tun und Berechtigung für Netzwerk-/Mount-Namespaces
-- Ausreichend verfügbare Bandbreite und Traffic-Volumen
-- Eigene gültige WireGuard-Clientkonfigurationen mit der Dateiendung .conf
+- **Linux** mit Docker Engine und **Docker Compose v2**.
+- WireGuard-Unterstützung im Linux-Kernel und verfügbares `/dev/net/tun`.
+- Containerberechtigungen für Netzwerk- und Mount-Namespaces (`NET_ADMIN`, `SYS_ADMIN`).
+- Eine oder mehrere gültige **WireGuard-Clientkonfigurationen** (`.conf`).
+- Ausreichend Bandbreite und verfügbares Datenvolumen für Durchsatztests.
 
-Die Docker-Compose-Datei funktioniert ohne Unraid, ohne feste Host-IP und ohne host-spezifische Pfade. Rootless Docker, Docker Desktop sowie stark eingeschränkte Containerlaufzeiten können wegen der benötigten Netzwerk-Capabilities ungeeignet sein.
+Rootless Docker, Docker Desktop auf macOS/Windows sowie restriktive Containerumgebungen sind wegen der erforderlichen Linux-Netzwerkfunktionen nicht als unterstützte Standardumgebung vorgesehen.
 
 ## Installation mit Docker Compose
 
-Repository klonen und in das Verzeichnis wechseln:
+**Repository und Docker-Image sind öffentlich.** Für das Klonen, den Image-Download und den Update-Check ist **weder ein GitHub-Konto noch ein GitHub-Token erforderlich**.
 
-~~~bash
+```bash
 git clone https://github.com/mlo-Tek/vpn-benchmark.git
 cd vpn-benchmark
 mkdir -p configs data
 cp .env.example .env
 docker compose up -d
-~~~
+```
 
-Das Repository ist derzeit privat. Zum Klonen und zum Bezug des privaten Container-Images werden entsprechende GitHub-Berechtigungen benötigt. Bei GHCR gegebenenfalls zuerst anmelden:
+Das öffentliche Docker-Image wird über `ghcr.io/mlo-tek/vpn-benchmark:latest` bezogen. Die Compose-Datei verwendet relative Verzeichnisse und benötigt keine speziellen Hostpfade.
 
-~~~bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u DEIN_GITHUB_NAME --password-stdin
-~~~
+Auf **dem Docker-Host** lautet die Webadresse:
 
-Den Token dabei nicht in der Shell-History oder im Repository speichern. Für reine Image-Downloads sind passende read:packages-Berechtigungen nötig.
+**http://127.0.0.1:8765**
 
-**Standardmäßig hört die Weboberfläche nur auf 127.0.0.1:8765 des Docker-Hosts.** Direkt auf dem Host öffnen: http://127.0.0.1:8765
+Wer Docker auf einem anderen Linux-Rechner betreibt, kann von seinem lokalen Rechner einen SSH-Tunnel öffnen:
 
-Von einem anderen Rechner aus über einen SSH-Tunnel:
+```bash
+ssh -L 8765:127.0.0.1:8765 benutzer@docker-host
+```
 
-~~~bash
-ssh -L 8765:127.0.0.1:8765 nutzer@docker-host
-~~~
+Danach im **lokalen** Browser `http://127.0.0.1:8765` öffnen. Es ist **keine** Portfreigabe am Router nötig.
 
-Dann im lokalen Browser http://127.0.0.1:8765 öffnen. Alternativ über ein bereits abgesichertes privates VPN zum Docker-Host verbinden und dort einen SSH-Tunnel nutzen.
+### Verzeichnisse
 
-## Konfiguration
+| Pfad im Projekt | Pfad im Container | Inhalt |
+| --- | --- | --- |
+| `./configs/` | `/configs` | WireGuard-Konfigurationen (`.conf`), schützenswerte private Schlüssel |
+| `./data/` | `/data` | Ergebnisse/SQLite-Datenbank sowie optionale Ziel- und Peer-Listen |
 
-Die Datei .env wird nicht ins Git-Repository aufgenommen. Die Beispiel-Datei .env.example enthält:
+Bei einem bestehenden Docker-Stack mit **absoluten Volume-Pfaden** diese Mounts beibehalten, damit vorhandene VPN-Konfigurationen und Messergebnisse erhalten bleiben.
+
+### Konfiguration über `.env`
+
+`.env.example` enthält die verfügbaren Einstellungen. `.env` ist gitignoriert und darf nicht veröffentlicht werden.
 
 | Variable | Standard | Bedeutung |
 | --- | --- | --- |
-| VPN_BENCHMARK_BIND | 127.0.0.1 | Adresse, an die Docker den Web-Port bindet |
-| VPN_BENCHMARK_PORT | 8765 | Port auf dem Host |
-| PUID / PGID | 1000 / 1000 | Eigentümer für angelegte Dateien |
-| TZ | Europe/Berlin | Zeitzone |
-| VPN_BENCHMARK_USER / VPN_BENCHMARK_PASSWORD | leer | Optionale HTTP-Basic-Anmeldung; beide gemeinsam setzen |
-| GITHUB_TOKEN | leer | Optionaler Read-only-Token zum Update-Check des privaten Repos |
+| `VPN_BENCHMARK_BIND` | `127.0.0.1` | Host-IP für die Web-Portbindung; den Loopback-Standard beibehalten |
+| `VPN_BENCHMARK_PORT` | `8765` | Web-Port auf dem Docker-Host |
+| `PUID` / `PGID` | `1000` / `1000` | Eigentümer von durch die Anwendung angelegten Dateien |
+| `TZ` | `Europe/Berlin` | Zeitzone |
+| `VPN_BENCHMARK_USER` / `VPN_BENCHMARK_PASSWORD` | leer | Optionale HTTP-Basic-Anmeldung; beide Variablen gemeinsam setzen |
 
-Für die normale Installation muss kein Port im Router weitergeleitet werden. **Nicht 0.0.0.0, einen öffentlichen Reverse Proxy, ein offenes Ingress oder ein Portforwarding verwenden**, um die Anwendung internetöffentlich bereitzustellen. Auch die optionale Basic-Authentifizierung ist ohne TLS nicht vor Abhören geschützt und schützt nicht gegen alle Angriffe. Wenn Zugriff aus einem abgeschotteten LAN tatsächlich nötig ist, nur mit geeigneter Firewall und starken Zugangsdaten arbeiten; der Loopback-Standard plus SSH-Tunnel ist vorzuziehen.
+**Kein `GITHUB_TOKEN`:** Der integrierte Update-Check nutzt die **öffentliche GitHub-API ohne Anmeldung**. Falls die GitHub-API nicht erreichbar ist oder ihr anonymes Rate-Limit greift, wird der Update-Status lediglich als unbekannt angezeigt. Die GitHub Actions verwenden beim **Veröffentlichen** des Images intern einen automatisch bereitgestellten CI-Token; den müssen Nutzer weder erstellen noch konfigurieren.
 
-Konfigurationen können über die Weboberfläche hochgeladen oder lokal unter configs/ abgelegt werden. Die Dateien sind wegen enthaltenen privaten WireGuard-Schlüsseln vertraulich. Der Container benötigt für Upload und Löschen Schreibzugriff auf configs/; data/ enthält die SQLite-Ergebnisse und optionale Messziele.
+Für API-Aufrufe, die Daten ändern (`POST`, `PUT`, `PATCH`, `DELETE`), ist der Header `X-VPN-Benchmark-Request: 1` erforderlich. Die Weboberfläche setzt ihn selbst. Dieser Schutz gegen einfache Cross-Site-Anfragen ist **kein Ersatz** für eine private Anbindung. Ein Upload erlaubt maximal 100 Konfigurationsdateien pro Anfrage und maximal 64 KiB pro Datei.
 
-Die Web-API schützt zustandsverändernde Aufrufe (POST, PUT, PATCH, DELETE) mit dem Header `X-VPN-Benchmark-Request: 1`. Die Weboberfläche setzt ihn automatisch. Eigene API-Clients müssen ihn ebenfalls senden. Dies verhindert einfache browserbasierte Cross-Site-Requests, **ist aber kein Ersatz für Authentifizierung oder eine private Netzwerkanbindung**. Uploads sind auf 100 Konfigurationsdateien je Anfrage und maximal 64 KiB je Datei begrenzt.
+### WireGuard-Konfigurationen hinzufügen
 
-## Testphasen und Aussagekraft
+Gültige `.conf`-Dateien über die Weboberfläche hochladen oder unter `./configs/` ablegen, optional nach VPN-Anbieter gruppiert. **Die privaten WireGuard-Schlüssel bleiben geheim**; Konfigurationen niemals in Git, Issues oder Logs veröffentlichen. Die Anwendung benötigt Schreibzugriff auf das Verzeichnis, weil die Weboberfläche Upload und Löschen unterstützt.
 
-1. **Baseline:** Vergleichsmessung ohne VPN, auf dem Docker-Host.
-2. **Peering:** Parallele isolierte WireGuard-Namespaces (standardmäßig acht); Handshake, Exit-Informationen, MTU, TCP-Verbindungszeiten und -Fehler zu je vier Zielen in NO, NL, DE, SE, CH, FI, DK und PL.
-3. **Durchsatz:** Seriell für die Finalisten (oder alle Configs im vollständigen Modus); globaler HTTPS-Download und -Upload, optional regionale iPerf3-Messungen.
+## Messablauf
 
-Der Standard-Swarm-Test simuliert TCP-Verbindungen zu öffentlichen Webhosts, keine echten BitTorrent-Verbindungen. **Optional** kann ein zusätzlicher echter TCP-BitTorrent-Handshake-Test gegen ausdrücklich konfigurierte Peers eines legalen Test-Torrents aktiviert werden. Dazu die Datei examples/bittorrent.yaml.example nach data/bittorrent.yaml kopieren, Beispielwerte durch aktuelle Peer-IP/Hostname, Port und 40-stelligen Infohash **desselben legalen Torrents** ersetzen und einen neuen Test starten. Maximal 25 Peers; Ergebnisse sind nur in den jeweiligen Diagnosedetails sichtbar und beeinflussen das Ranking bewusst nicht, weil einzelne Peers jederzeit offline gehen können.
+1. **Baseline:** Vergleichsmessung ohne WireGuard-Tunnel **aus dem Docker-Container-Netzwerk**; dies ist nicht zwangsläufig identisch mit einer Messung direkt auf dem Linux-Host.
+2. **Peering:** Paralleler Aufbau isolierter WireGuard-Tunnel (standardmäßig bis zu acht gleichzeitig); Handshake, Exit-Informationen, MTU, TCP-Zielmessungen und synthetischer TCP-Swarm.
+3. **Durchsatz:** HTTPS-Down-/Upload, optional iPerf3 zu ausgewählten Ländern. In der üblichen Top-N-Auswahl werden nur Finalisten vollständig durchgemessen; der vollständige Modus kann alle Konfigurationen berücksichtigen.
 
-**Weder der normale noch der optionale Test prüft UDP/uTP, Tracker-Discovery, echte Datenübertragung zwischen BitTorrent-Peers oder eingehende Portweiterleitung.** Ein hohes Ergebnis garantiert daher weder gute Seeding-Performance noch Port-Forwarding-Unterstützung. Eingehende Erreichbarkeit separat mit einem externen Port-Forward-Test und einem legalen Test-Torrent prüfen. Ohne data/bittorrent.yaml gibt es keinerlei echte BitTorrent-Kontakte.
+**Messgrenzen:** Beim TCP-Swarm handelt es sich um HTTPS/TCP-Verbindungsversuche zu Webhosts – **nicht um einen echten Torrent-Schwarm**. Es werden standardmäßig keine Tracker, BitTorrent-Peers oder eingehenden Ports geprüft. Server, CDN-Routing, parallele Nutzer, VPN-Provider und Zeitpunkte können die Resultate erheblich beeinflussen.
 
-Der HTTPS-Upload zählt nur abgeschlossene Upload-Anfragen, die vom Testserver mit HTTP-2xx bestätigt wurden. Abgebrochene oder abgewiesene Anfragen werden nicht als erfolgreicher Datentransfer gezählt. Das ist bewusst konservativ; insbesondere bei kurzen Testdauern kann der Wert unter der tatsächlich genutzten Leitungskapazität liegen. Öffentliche iPerf3-Server können überlastet, ausgefallen oder auf einen Client begrenzt sein. Fehlschläge und fehlende Messwerte sind daher kein sicherer Beweis für einen schlechten VPN-Exit.
+Der HTTPS-Upload berücksichtigt nur vollständig gesendete Anfragen, die mit einem erfolgreichen HTTP-Status (`2xx`) bestätigt wurden. Bei kurzen Tests kann dieser konservative Ansatz niedriger ausfallen als die reale Leitungskapazität. Regionale öffentliche iPerf3-Server sind möglicherweise ausgelastet oder zeitweise unerreichbar.
 
-## Ranking
+### Optional: BitTorrent-Handshake-Test
 
-In den Einstellungen zwischen folgenden Profilen wählen:
+Wer eigene, zulässige Test-Peers eines **legalen Test-Torrents** hat, kann diese ausdrücklich konfigurieren:
 
-- **Seeding (Standard):** Upload priorisiert; globaler Durchsatz gewichtet 75 % Upload und 25 % Download, regionale Uploadtests stärker als Downloadtests.
-- **Ausgewogen:** Globaler Durchsatz gewichtet 30 % Upload und 70 % Download.
+```bash
+cp examples/bittorrent.yaml.example data/bittorrent.yaml
+```
 
-Länder-Gewichte lassen sich ebenfalls einstellen. Gespeicherte Rohmessungen werden bei geänderten Gewichten beziehungsweise Profilen neu bewertet.
+Danach im Ziel `data/bittorrent.yaml` die Beispielangaben (`host`, `port`, 40-stelliger `infohash`) ersetzen. Maximal 25 Peers. Ohne diese Datei werden keine echten BitTorrent-Peers kontaktiert.
 
-Wichtig: **Nur die Top-N erhalten im Standardmodus Durchsatzmessungen.** Resultate mit voller Durchsatzabdeckung werden deshalb vor vorläufigen Peering-only-Resultaten geführt. Die beiden Scores sind **nicht direkt vergleichbar**, ebenso wenig Testläufe mit unterschiedlich umfangreichen oder gescheiterten regionalen Messungen. Für einen fairen Endvergleich den vollständigen Modus wählen und nach Möglichkeit mehrere Läufe durchführen.
+Dieser Zusatztest prüft **nur ausgehende BitTorrent-TCP-Handshakes**, keine Datentransfers, kein UDP/uTP, keine Tracker-Suche und **keine eingehende Portweiterleitung**. Seine Resultate fließen nicht in das reguläre Ranking ein, weil einzelne Peers offline sein können.
 
-## Eigene Messziele
+## Ranking und Ergebnisse
 
-- targets.yaml: Eine eigene Datei unter data/targets.yaml überschreibt die im Image gebündelte Liste der TCP-Testziele.
-- regions.yaml: Eine eigene Datei unter data/regions.yaml überschreibt die iPerf3-Testserver.
+- **Seeding (Standard):** Upload hat Vorrang. Beim globalen Durchsatzscore werden **75 % Upload und 25 % Download** gewichtet.
+- **Ausgewogen:** Beim globalen Durchsatzscore werden **30 % Upload und 70 % Download** gewichtet.
 
-Die Formate sind in app/targets.yaml und app/regions.yaml dokumentiert. Für Länder-RTT möglichst regional verortete Ziele ohne weltweit verteiltes CDN nutzen, sonst kann ein CDN-PoP im falschen Land gemessen werden.
+Die Bewertung berücksichtigt daneben Peering, simulierte TCP-Verbindungsrate und Zuverlässigkeit. Die Länder-Gewichte können in der Weboberfläche eingestellt werden; gespeicherte Rohdaten werden beim Ändern des Profils erneut bewertet.
+
+**Wichtig:** Peering-only-Ergebnisse und vollständige Durchsatzmessungen haben unterschiedliche Messabdeckung und sind **nicht direkt vergleichbar**. Für faire Vergleiche mehrere vollständige Durchläufe mit gleichen Testeinstellungen durchführen. Der Score ist kein Nachweis für Anonymität, erfolgreiche Portweiterleitung oder die tatsächliche langfristige Seeding-Leistung.
+
+## Eigene Testziele
+
+Bei Bedarf folgende Dateien anlegen, um die im Container enthaltenen Standardziele zu überschreiben:
+
+| Datei auf dem Host | Wirkung |
+| --- | --- |
+| `data/targets.yaml` | TCP-Testziele pro Land, Vorlage unter [app/targets.yaml](app/targets.yaml) |
+| `data/regions.yaml` | Regionale iPerf3-Server, Vorlage unter [app/regions.yaml](app/regions.yaml) |
+| `data/bittorrent.yaml` | Optionale echte BitTorrent-Peer-Handshakes, Beispiel unter [examples/bittorrent.yaml.example](examples/bittorrent.yaml.example) |
+
+Bei Ländertests auf tatsächlich regional verortete Ziele achten. Weltweit verteilte CDNs können in einer anderen Region antworten und die Länderbewertung verfälschen.
 
 ## Updates und Wartung
 
-~~~bash
+Im Verzeichnis der Compose-Datei:
+
+```bash
 docker compose pull
 docker compose up -d
 docker compose ps
 docker compose logs -f --tail=100
-~~~
+```
 
-Für einen privaten GitHub-Update-Check kann ein fein begrenzter GITHUB_TOKEN in der lokalen .env gesetzt werden. Docker zieht Images nicht selbständig bei jedem neuen Commit; die obigen Befehle sind für Updates auszuführen. Die GitHub-Action prüft Tests und veröffentlicht das Image nach Änderungen auf main.
+Die Weboberfläche kann **ohne GitHub-Token** per öffentlicher GitHub-API prüfen, ob es einen neueren Commit auf `main` gibt. Der Vergleich prüft **Commits, nicht den tatsächlichen Veröffentlichungsstand des Container-Images**. Ein neuer Commit kann daher bereits angezeigt werden, während das neue Docker-Image noch gebaut wird.
 
-Lokale Verzeichnisse configs/ und data/ vor Updates sichern. **Niemals** private WireGuard-Keys, .env, personenbezogene Daten oder Logdateien mit Zugangsdaten in Issues, Pull Requests oder KI-Chats kopieren.
+Das Image wird nach erfolgreich durchlaufenen automatisierten Tests von GitHub Actions nach GHCR veröffentlicht. Docker Compose aktualisiert laufende Container **nicht automatisch**; dafür `docker compose pull` und `docker compose up -d` ausführen. Vor Updates `./configs/` und `./data/` sichern. Bei bestehenden Stacks eigene Volume-Zuordnungen und Ports beibehalten.
 
 ## Entwicklung und Tests
 
-~~~bash
+```bash
 python -m pip install -r requirements.txt pytest httpx
 python -m pytest -q
-~~~
+```
 
-Die Unit-Tests decken unter anderem Parsing, Upload-Validierung, Rankings, Verlauf und iPerf3-Datenverarbeitung ab. Sie ersetzen keinen echten Integrationstest mit funktionierenden WireGuard-Konfigurationen, einem Linux-Host und realen Netzwerkzielen.
+GitHub Actions führt Unit-Tests aus und baut danach das Container-Image. **Ein grüner CI-Lauf belegt lediglich, dass diese Tests bestanden wurden.** Er ist kein Nachweis für sichere Containerprivilegien, korrekt funktionierende WireGuard-Namespaces auf allen Hosts, vollständige Netzwerksicherheit oder valide Messungen unter realen VPN-Bedingungen.
 
-## KI-/AI-Hinweis
+## KI-Einsatz und Grenzen
 
-Teile des Quellcodes und der Dokumentation wurden mithilfe generativer KI-Assistenten erstellt oder überarbeitet. **KI-generierter Code kann Fehler und Sicherheitslücken enthalten.** Die Ergebnisse sind kein unabhängiger Sicherheits-Audit; insbesondere Messlogik, Netzwerkisolation und Privilegien müssen vor einem produktiven Einsatz selbst geprüft werden. Benchmark-Ergebnisse dienen als Entscheidungshilfe und sind keine Garantie für Performance, Anonymität oder Sicherheit.
+> [!WARNING]
+> **Dieses Projekt wurde in wesentlichen Teilen KI-gestützt entwickelt.** Generative KI wurde nicht nur für Texte eingesetzt, sondern auch bei **Programmierung, Messverfahren, Scoring, Weboberfläche, Docker-/CI-Konfiguration und Änderungen am bestehenden Code**. Deshalb kann es trotz funktionierender Features und bestandener Tests **unentdeckte Fehler, Sicherheitslücken, unzutreffende Annahmen oder irreführende Benchmark-Ergebnisse** geben.
+
+Die bisherigen Prüfungen und automatisierten Tests sind **kein unabhängiger Security-Audit**, keine formelle Codeprüfung und kein vollständiger End-to-End-Test auf beliebigen Linux-Hosts. Die Anwendung sollte ausschließlich in einer **kontrollierten, nicht öffentlich erreichbaren Umgebung** und mit VPN-Konfigurationen eingesetzt werden, für die eine Berechtigung besteht. Ergebnisse selbst plausibilisieren und sicherheitsrelevante Änderungen fachlich prüfen.
+
+**Besonders wichtig:** Auch eine erfolgreich aufgebaute WireGuard-Verbindung bedeutet nicht automatisch, dass kein Datenleck auftritt, eingehende Torrent-Verbindungen funktionieren oder die reale Seeding-Leistung dem Score entspricht. Das Tool ist eine experimentelle Vergleichshilfe und kein Sicherheitsprodukt.
 
 ## Lizenz
 
-Dieses Projekt ist unter der [MIT-Lizenz](LICENSE) veröffentlicht.
-Copyright © 2026 mlo-Tek. Die Lizenz erlaubt Nutzung, Änderung und Weitergabe
-des Quellcodes, auch kommerziell, sofern der Copyright- und Lizenzhinweis
-beibehalten wird.
+Dieses Projekt ist unter der [MIT-Lizenz](LICENSE) veröffentlicht. Copyright © 2026 mlo-Tek. Nutzung, Modifikation und Weitergabe – auch kommerziell – sind bei Beibehaltung des Lizenz- und Copyright-Hinweises erlaubt.
 
-## Haftung und Betrieb
+## Haftung und verantwortungsvolle Nutzung
 
-Benutzung auf eigenes Risiko. Nur VPN-Profile und Testziele verwenden, für die eine Berechtigung besteht. Öffentliche Server fair benutzen; wiederholte Durchsatztests erzeugen beträchtlichen Datenverkehr.
+Benutzung auf eigenes Risiko und ohne Gewähr. Ausschließlich eigene oder zur Nutzung freigegebene VPN-Konfigurationen und Testziele verwenden. Öffentliche Testserver fair behandeln; wiederholte Durchsatztests können erheblichen Traffic und Kosten verursachen. **Keine privaten Schlüssel, Zugangsdaten, `.env`-Dateien oder sensiblen Logs in GitHub-Issues, Pull Requests oder KI-Chats posten.**
