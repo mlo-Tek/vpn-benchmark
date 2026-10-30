@@ -6,87 +6,96 @@
 <title>VPN Benchmark</title>
 <style>
   :root {
-    --bg:#f6f7f9; --panel:#ffffff; --fg:#14171c; --muted:#667085; --line:#e4e7ec; --soft:#f2f4f7;
-    --accent:#2f6df6; --accent-fg:#fff; --good:#16a34a; --warn:#d97706; --bad:#dc2626;
-    --shadow:0 1px 2px rgba(16,24,40,.06);
+    --bg:#f5f6f8; --panel:#fff; --fg:#14171c; --muted:#667085; --line:#e4e7ec; --soft:#f1f3f6;
+    --accent:#2f6df6; --accent-fg:#fff; --good:#16a34a; --warn:#d97706; --bad:#dc2626; --shadow:0 1px 2px rgba(16,24,40,.06);
   }
-  :root:not([data-theme="light"]) { }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg:#0d0f13; --panel:#15181e; --fg:#e8eaee; --muted:#98a1b0; --line:#262b34; --soft:#1b1f27;
+      --bg:#0c0e12; --panel:#14171d; --fg:#e8eaee; --muted:#98a1b0; --line:#252a33; --soft:#1a1e26;
       --accent:#5b8def; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --shadow:none;
     }
   }
   * { box-sizing:border-box; }
-  a { color:var(--accent); }
-  a.btn { color:var(--fg); }
   body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
-  .wrap { max-width:1280px; margin:0 auto; padding:0 16px 48px; }
-  header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:16px 0 8px; }
-  header h1 { font-size:20px; margin:0; letter-spacing:-.01em; }
+  a { color:var(--accent); } a.btn { color:var(--fg); text-decoration:none; }
+  .wrap { max-width:1320px; margin:0 auto; padding:0 16px 48px; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 0 6px; }
+  header h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
   .spacer { flex:1; }
-  .badge { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; font-size:12px;
-    background:var(--soft); color:var(--muted); border:1px solid var(--line); }
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:999px; font-size:12px; background:var(--soft); color:var(--muted); border:1px solid var(--line); }
   .badge.update { background:color-mix(in srgb,var(--warn) 18%,transparent); color:var(--warn); border-color:var(--warn); cursor:pointer; }
   .badge.current { color:var(--good); }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
-  .dot.run { background:var(--good); animation:pulse 1.2s infinite; }
+  .dot.run { background:var(--good); animation:pulse 1.2s infinite; } .dot.pause { background:var(--warn); }
   @keyframes pulse { 50% { opacity:.3; } }
-  nav { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:16px; overflow-x:auto; }
-  nav button { background:none; border:0; border-bottom:2px solid transparent; padding:10px 14px; color:var(--muted);
-    font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+  nav { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+  nav button { background:none; border:0; border-bottom:2px solid transparent; padding:10px 14px; color:var(--muted); font:inherit; font-weight:600; cursor:pointer; }
   nav button.on { color:var(--fg); border-color:var(--accent); }
   section { display:none; } section.on { display:block; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; box-shadow:var(--shadow); }
-  .card h2 { font-size:13px; margin:0 0 10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .card h2 { font-size:12px; margin:0 0 10px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
   .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   label.f { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
-  select,input[type=text],input[type=number],input[type=search] { font:inherit; padding:7px 10px; border:1px solid var(--line);
-    border-radius:8px; background:var(--panel); color:var(--fg); min-width:0; }
-  button.btn { font:inherit; font-weight:600; padding:8px 14px; border-radius:8px; border:1px solid var(--line);
-    background:var(--panel); color:var(--fg); cursor:pointer; }
+  select,input[type=text],input[type=number],input[type=search] { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--panel); color:var(--fg); min-width:0; }
+  button.btn { font:inherit; font-weight:600; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--fg); cursor:pointer; }
+  button.btn.sm, a.btn.sm { padding:4px 10px; font-size:12px; }
   button.btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
-  button.btn.danger { color:var(--bad); }
+  button.btn.warn { color:var(--warn); border-color:var(--warn); } button.btn.danger { color:var(--bad); }
   button.btn:disabled { opacity:.45; cursor:default; }
   .muted { color:var(--muted); } .small { font-size:12px; }
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:14px; }
-  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; box-shadow:var(--shadow); }
-  .kpi .l { font-size:12px; color:var(--muted); } .kpi .v { font-size:22px; font-weight:700; letter-spacing:-.02em; }
-  .kpi .s { font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .scroll { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; }
   th,td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
-  th:first-child,td:first-child,.l { text-align:left; }
-  th { color:var(--muted); font-weight:600; font-size:12px; cursor:pointer; user-select:none; position:sticky; top:0; background:var(--panel); }
-  tbody tr:hover { background:var(--soft); }
-  tr.click { cursor:pointer; }
-  .bar { height:8px; background:var(--soft); border-radius:99px; overflow:hidden; }
-  .bar > i { display:block; height:100%; background:var(--accent); border-radius:99px; transition:width .5s; }
+  .l, th.l, td.l { text-align:left; }
+  th { color:var(--muted); font-weight:600; font-size:12px; cursor:pointer; user-select:none; }
+  tbody tr:hover { background:var(--soft); } tr.click { cursor:pointer; }
+  .bar { height:8px; background:var(--soft); border-radius:99px; overflow:hidden; } .bar > i { display:block; height:100%; background:var(--accent); border-radius:99px; transition:width .5s; }
   .bar.big { height:12px; }
   .chip { display:inline-block; padding:1px 9px; border-radius:99px; font-size:12px; background:var(--soft); color:var(--muted); }
   .chip.ok { background:color-mix(in srgb,var(--good) 18%,transparent); color:var(--good); }
   .chip.run { background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); }
   .chip.bad { background:color-mix(in srgb,var(--bad) 18%,transparent); color:var(--bad); }
-  .steps { display:flex; gap:8px; margin:10px 0 12px; flex-wrap:wrap; }
-  .step { padding:4px 12px; border-radius:99px; background:var(--soft); color:var(--muted); font-size:12px; font-weight:600; }
-  .step.on { background:var(--accent); color:var(--accent-fg); } .step.done { color:var(--good); }
-  pre.log { margin:0; max-height:200px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,monospace; background:var(--soft); padding:10px; border-radius:8px; }
-  .drop { border:2px dashed var(--line); border-radius:12px; padding:22px; text-align:center; color:var(--muted); transition:.15s; }
-  .drop.over { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,transparent); color:var(--fg); }
-  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:14px; }
-  .hl { display:grid; grid-template-columns:150px 1fr 56px; gap:8px; align-items:center; padding:3px 0; font-size:13px; }
-  .hl .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .hl .v { text-align:right; font-variant-numeric:tabular-nums; }
-  dialog { border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--fg); max-width:760px; width:94vw; padding:18px; }
+  .chip.warn { background:color-mix(in srgb,var(--warn) 18%,transparent); color:var(--warn); }
+  .pill { cursor:pointer; user-select:none; border:1px solid var(--line); background:var(--panel); } .pill.on { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+  .steps { display:flex; gap:6px; flex-wrap:wrap; }
+  .step { padding:2px 12px; border-radius:99px; background:var(--soft); color:var(--muted); font-size:12px; font-weight:600; } .step.on { background:var(--accent); color:var(--accent-fg); } .step.done { color:var(--good); }
+  pre.log { margin:8px 0 0; max-height:200px; overflow:auto; font:12px/1.5 ui-monospace,Menlo,monospace; background:var(--soft); padding:10px; border-radius:8px; }
+  .sticky { position:sticky; top:0; z-index:5; }
+  #overlay { position:fixed; inset:0; z-index:20; background:color-mix(in srgb,var(--accent) 22%,rgba(0,0,0,.45)); display:none; align-items:center; justify-content:center; font-size:22px; font-weight:700; color:#fff; pointer-events:none; }
+  #overlay.on { display:flex; }
+  .banner { padding:8px 12px; border-radius:8px; background:color-mix(in srgb,var(--warn) 16%,transparent); color:var(--warn); font-weight:600; margin-top:10px; }
+  /* results */
+  .podium { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:14px; }
+  .pod { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:var(--shadow); display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:center; cursor:pointer; position:relative; }
+  .pod:hover { border-color:var(--accent); }
+  .pod .rank { position:absolute; top:10px; right:14px; font-weight:800; font-size:12px; color:var(--muted); }
+  .pod.first { border-color:color-mix(in srgb,var(--accent) 55%,var(--line)); background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 10%,var(--panel)),var(--panel)); }
+  .ring { --p:0; width:84px; height:84px; border-radius:50%; background:conic-gradient(var(--c,var(--accent)) calc(var(--p)*1%), var(--soft) 0); display:grid; place-items:center; }
+  .ring b { width:64px; height:64px; border-radius:50%; background:var(--panel); display:grid; place-items:center; font-size:20px; letter-spacing:-.02em; }
+  .pod h3 { margin:0; font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pod .facts { display:grid; grid-template-columns:auto auto; gap:2px 14px; margin-top:6px; font-size:12px; color:var(--muted); }
+  .pod .facts b { color:var(--fg); font-weight:600; text-align:right; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:14px; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 14px; box-shadow:var(--shadow); }
+  .stat .l { font-size:12px; color:var(--muted); } .stat .v { font-size:20px; font-weight:700; letter-spacing:-.02em; }
+  .bests { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .best { border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--soft); }
+  .best b { font-size:13px; } .best .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:14px; }
+  .hm td, .hm th { padding:5px 8px; } .hm td.c { text-align:center; min-width:52px; font-variant-numeric:tabular-nums; }
+  .hm td:first-child, .hm th:first-child { position:sticky; left:0; background:var(--panel); z-index:1; }
+  svg text { fill:var(--muted); font-size:11px; } svg .gl { stroke:var(--line); }
+  svg circle { cursor:pointer; stroke:var(--panel); stroke-width:1.5; } svg circle:hover { stroke:var(--fg); }
+  dialog { border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--fg); max-width:780px; width:94vw; padding:18px; }
   dialog::backdrop { background:rgba(0,0,0,.45); }
-  .toast { position:fixed; right:16px; bottom:16px; background:var(--fg); color:var(--bg); padding:10px 14px; border-radius:10px; opacity:0; transition:.25s; pointer-events:none; max-width:360px; z-index:9; }
+  .toast { position:fixed; right:16px; bottom:16px; background:var(--fg); color:var(--bg); padding:10px 14px; border-radius:10px; opacity:0; transition:.25s; pointer-events:none; max-width:360px; z-index:30; }
   .toast.show { opacity:1; }
-  .empty { padding:28px; text-align:center; color:var(--muted); }
+  .empty { padding:30px; text-align:center; color:var(--muted); }
   code { background:var(--soft); padding:1px 6px; border-radius:6px; font-size:12px; }
-  @media (max-width:640px) { .hl { grid-template-columns:100px 1fr 48px; } }
 </style>
 </head>
 <body>
+<div id="overlay">Configs hier ablegen</div>
 <div class="wrap">
 <header>
   <h1>VPN Benchmark</h1>
@@ -95,18 +104,15 @@
   <span class="badge" id="ver">…</span>
   <span class="badge" id="upd" hidden></span>
 </header>
-
 <nav id="tabs">
-  <button data-t="test" class="on">Test</button>
+  <button data-t="start" class="on">Start</button>
   <button data-t="results">Ergebnisse</button>
-  <button data-t="configs">Configs <span class="chip" id="cfgN">0</span></button>
   <button data-t="settings">Einstellungen</button>
 </nav>
 
-<!-- ============ TEST ============ -->
-<section id="t-test" class="on">
-  <div class="card">
-    <h2>Test starten</h2>
+<!-- ================= START ================= -->
+<section id="t-start" class="on">
+  <div class="card sticky" id="ctl">
     <div class="row">
       <label class="f">Modus
         <select id="mode">
@@ -114,76 +120,62 @@
           <option value="peering">Nur Peering (am schnellsten)</option>
           <option value="full">Voll: Durchsatz für alle</option>
         </select></label>
-      <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:80px"></label>
-      <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:80px"></label>
+      <label class="f">Parallel <input id="parallel" type="number" value="8" min="1" max="32" style="width:70px"></label>
+      <label class="f">Top-N <input id="topn" type="number" value="10" min="1" style="width:70px"></label>
       <span class="spacer"></span>
-      <span class="muted"><b id="selN">0</b> von <b id="allN">0</b> Configs ausgewählt
-        · <a href="#" id="goCfg">Auswahl ändern</a></span>
+      <span><b id="selN">0</b> von <b id="allN">0</b> ausgewählt</span>
       <button class="btn primary" id="start">Test starten</button>
-      <button class="btn danger" id="stop" hidden>Abbrechen</button>
+      <button class="btn warn" id="pause" hidden>Pause</button>
+      <button class="btn danger" id="stop" hidden>Stopp</button>
     </div>
-    <div class="small muted" style="margin-top:8px">Keine Auswahl = alle Configs. Peering läuft parallel, der Durchsatz seriell, weil sich alle Tests deine Leitung teilen.</div>
+    <div id="liveBox" hidden>
+      <div class="row" style="margin-top:12px">
+        <div class="steps" id="steps"></div><span class="spacer"></span>
+        <b id="pct">0%</b><span class="muted small" id="liveInfo"></span><span class="muted small" id="elapsed"></span>
+      </div>
+      <div class="bar big" style="margin-top:6px"><i id="pbar" style="width:0"></i></div>
+      <div class="banner" id="pausedBanner" hidden>Pausiert. Bereits laufende Configs werden noch fertig, neue starten erst nach „Fortsetzen“.</div>
+    </div>
   </div>
 
-  <div class="card" id="live" hidden>
-    <h2>Live</h2>
-    <div class="steps" id="steps"></div>
-    <div class="row" style="margin-bottom:6px">
-      <b id="pct">0%</b><span class="muted" id="liveInfo"></span><span class="spacer"></span><span class="muted" id="elapsed"></span>
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <input type="search" id="q" placeholder="Suchen: Name, Anbieter, Endpoint …" style="flex:1;min-width:200px">
+      <button class="btn sm" id="selVis">Sichtbare auswählen</button>
+      <button class="btn sm" id="selNone">Keine</button>
+      <button class="btn sm" id="pickFiles">+ Dateien</button>
+      <button class="btn sm" id="pickDir">+ Ordner</button>
+      <input type="text" id="upProv" placeholder="Anbieter für Upload (optional)" style="width:200px">
+      <input type="file" id="fileIn" accept=".conf" multiple hidden>
+      <input type="file" id="dirIn" webkitdirectory multiple hidden>
     </div>
-    <div class="bar big"><i id="pbar" style="width:0"></i></div>
-    <div class="scroll" style="margin-top:12px"><table id="items"></table></div>
-    <details style="margin-top:10px" open><summary class="muted">Log</summary><pre class="log" id="log"></pre></details>
+    <div class="row" id="provChips" style="margin-bottom:10px"></div>
+    <div class="scroll"><table id="cfgTbl"></table></div>
+    <div class="small muted" style="margin-top:8px">Tipp: .conf-Dateien oder Ordner einfach irgendwo auf die Seite ziehen. Der Ordnername wird zum Anbieter.</div>
   </div>
-  <div class="card empty" id="idleHint">Noch kein Test gestartet. Wähle Configs aus und starte einen Lauf. Ergebnisse siehst du live im Tab „Ergebnisse“.</div>
+
+  <div class="card" id="logCard" hidden>
+    <details><summary class="muted">Log</summary><pre class="log" id="log"></pre></details>
+  </div>
 </section>
 
-<!-- ============ RESULTS ============ -->
+<!-- ================= RESULTS ================= -->
 <section id="t-results">
   <div class="row" style="margin-bottom:12px">
-    <select id="runs" style="min-width:280px"></select>
-    <a class="btn" id="csv" href="#" style="text-decoration:none">CSV</a>
-    <span class="spacer"></span>
-    <span class="muted small" id="baseInfo"></span>
+    <select id="runs" style="min-width:300px"></select>
+    <a class="btn sm" id="csv" href="#">CSV</a>
+    <span class="spacer"></span><span class="muted small" id="baseInfo"></span>
   </div>
   <div id="resBody"><div class="card empty">Noch keine Ergebnisse.</div></div>
 </section>
 
-<!-- ============ CONFIGS ============ -->
-<section id="t-configs">
-  <div class="card">
-    <h2>Configs hinzufügen</h2>
-    <div class="drop" id="drop">
-      <div><b>.conf-Dateien oder ganze Ordner hierher ziehen</b></div>
-      <div class="small" style="margin:6px 0 10px">Der übergeordnete Ordner wird zum Anbieter (z. B. <code>CryptoStorm/cs-poland.conf</code>).</div>
-      <div class="row" style="justify-content:center">
-        <button class="btn" id="pickFiles">Dateien wählen</button>
-        <button class="btn" id="pickDir">Ordner wählen</button>
-        <input type="text" id="upProv" placeholder="Anbieter überschreiben (optional)" style="width:240px">
-      </div>
-      <input type="file" id="fileIn" accept=".conf" multiple hidden>
-      <input type="file" id="dirIn" webkitdirectory multiple hidden>
-    </div>
-  </div>
-  <div class="card">
-    <div class="row" style="margin-bottom:10px">
-      <input type="search" id="q" placeholder="Suchen: Name, Anbieter, Endpoint …" style="flex:1;min-width:200px">
-      <select id="provF"></select>
-      <button class="btn" id="selVis">Sichtbare auswählen</button>
-      <button class="btn" id="selNone">Auswahl leeren</button>
-    </div>
-    <div class="scroll"><table id="cfgTbl"></table></div>
-  </div>
-</section>
-
-<!-- ============ SETTINGS ============ -->
+<!-- ================= SETTINGS ================= -->
 <section id="t-settings">
   <div class="card">
     <h2>Version &amp; Updates</h2>
     <div id="verBox" class="muted">…</div>
     <div class="row" style="margin-top:10px"><button class="btn" id="recheck">Jetzt prüfen</button></div>
-    <div class="small muted" style="margin-top:10px">Aktualisieren auf dem Unraid:
-      <code>cd /mnt/cache/compose/vpn-benchmark &amp;&amp; docker compose pull &amp;&amp; docker compose up -d</code><br>
+    <div class="small muted" style="margin-top:10px">Aktualisieren auf dem Unraid: <code>cd /mnt/cache/compose/vpn-benchmark &amp;&amp; docker compose pull &amp;&amp; docker compose up -d</code><br>
       Der Check braucht für das private Repo ein <code>GITHUB_TOKEN</code> (fine-grained, nur lesen: Contents) in der compose.yaml.</div>
   </div>
   <div class="card">
@@ -204,8 +196,13 @@ const api = async (u, o) => { const r = await fetch(u, o); if (!r.ok) { let m = 
 const fmt = (v, d = 0) => v == null || isNaN(v) ? "–" : Number(v).toFixed(d);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
-function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 3500); }
+const toast = m => { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 3500); };
 const dur = s => s == null ? "–" : s < 60 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
+const avg = (a, f) => { const v = a.map(f).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((x, y) => x + y) / v.length : null; };
+const provOf = n => n.includes("/") ? n.split("/")[0] : "(root)";
+const shortName = n => n.includes("/") ? n.split("/").slice(1).join("/") : n;
+const pcolor = (() => { const m = {}; return p => m[p] ||= `hsl(${(Object.keys(m).length * 67 + 215) % 360} 65% 55%)`; })();
+const scoreColor = v => v >= 80 ? "var(--good)" : v >= 60 ? "var(--accent)" : v >= 40 ? "var(--warn)" : "var(--bad)";
 
 /* ---------- tabs ---------- */
 function showTab(t) {
@@ -214,73 +211,81 @@ function showTab(t) {
   store.set("tab", t);
 }
 $("tabs").onclick = e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.t); };
-$("goCfg").onclick = e => { e.preventDefault(); showTab("configs"); };
 
-/* ---------- configs ---------- */
-let configs = [], selected = new Set(store.get("sel", []));
-function saveSel() { store.set("sel", [...selected]); $("selN").textContent = selected.size; }
+/* ---------- state ---------- */
+let configs = [], selected = new Set(store.get("sel", [])), provFilter = new Set(), status = { items: {}, running: false, log: [] }, current = null;
+const resultOf = id => current && status.running && current.id === status.run_id ? current.results.find(r => r.name === id) : null;
 
+/* ---------- start page: config table with live columns ---------- */
 async function loadConfigs() {
   configs = await api("/api/configs");
   for (const id of [...selected]) if (!configs.find(c => c.id === id)) selected.delete(id);
-  $("cfgN").textContent = configs.length; $("allN").textContent = configs.length;
-  const provs = [...new Set(configs.map(c => c.provider))].sort();
-  const cur = $("provF").value;
-  $("provF").innerHTML = `<option value="">Alle Anbieter</option>` + provs.map(p => `<option ${p === cur ? "selected" : ""}>${esc(p)}</option>`).join("");
-  renderConfigs(); saveSel();
+  $("allN").textContent = configs.length;
+  renderChips(); renderConfigs(); saveSel();
 }
-function visibleConfigs() {
-  const q = $("q").value.trim().toLowerCase(), p = $("provF").value;
-  return configs.filter(c => (!p || c.provider === p) && (!q || `${c.id} ${c.endpoint || ""}`.toLowerCase().includes(q)));
+const saveSel = () => { store.set("sel", [...selected]); $("selN").textContent = selected.size; };
+function renderChips() {
+  const n = {}; configs.forEach(c => n[c.provider] = (n[c.provider] || 0) + 1);
+  $("provChips").innerHTML = Object.entries(n).sort().map(([p, k]) =>
+    `<span class="chip pill ${provFilter.has(p) ? "on" : ""}" data-p="${esc(p)}">${esc(p)} · ${k}</span>`).join("") +
+    (provFilter.size ? ` <span class="chip pill" data-p="">Filter zurücksetzen</span>` : "");
 }
+$("provChips").onclick = e => { const c = e.target.closest("[data-p]"); if (!c) return; const p = c.dataset.p;
+  if (!p) provFilter.clear(); else provFilter.has(p) ? provFilter.delete(p) : provFilter.add(p); renderChips(); renderConfigs(); };
+function visible() {
+  const q = $("q").value.trim().toLowerCase();
+  return configs.filter(c => (!provFilter.size || provFilter.has(c.provider)) && (!q || `${c.id} ${c.endpoint || ""}`.toLowerCase().includes(q)));
+}
+const STATUS = { queued: ["wartet", ""], connecting: ["verbindet", "run"], peering: ["misst", "run"], "peering done": ["Peering fertig", "ok"], throughput: ["Durchsatz", "run"], done: ["fertig", "ok"], failed: ["Fehler", "bad"], "throughput failed": ["Durchsatz-Fehler", "warn"], cancelled: ["abgebrochen", "bad"] };
 function renderConfigs() {
-  const vis = visibleConfigs();
-  if (!configs.length) { $("cfgTbl").innerHTML = `<tr><td class="empty">Noch keine Configs. Zieh oben Dateien oder einen Ordner hinein.</td></tr>`; return; }
+  const vis = visible(), live = Object.keys(status.items).length > 0;
+  if (!configs.length) { $("cfgTbl").innerHTML = `<tr><td class="empty">Noch keine Configs. Zieh .conf-Dateien oder einen Ordner auf diese Seite.</td></tr>`; return; }
   const allSel = vis.length && vis.every(c => selected.has(c.id));
-  $("cfgTbl").innerHTML = `<thead><tr><th style="width:30px"><input type="checkbox" id="chkAll" ${allSel ? "checked" : ""}></th><th>Name</th><th class="l">Anbieter</th><th class="l">Endpoint</th><th>IPv6</th><th></th></tr></thead><tbody>` +
-    vis.map(c => `<tr><td><input type="checkbox" data-id="${esc(c.id)}" ${selected.has(c.id) ? "checked" : ""}></td>
-      <td class="l"><b>${esc(c.name)}</b>${c.valid ? "" : ` <span class="chip bad" title="${esc(c.error)}">ungültig</span>`}</td>
-      <td class="l">${esc(c.provider)}</td><td class="l muted">${esc(c.endpoint || "")}</td>
-      <td>${c.ipv6 ? "ja" : "–"}</td><td><button class="btn danger small" data-del="${esc(c.id)}">Löschen</button></td></tr>`).join("") + "</tbody>";
+  $("cfgTbl").innerHTML = `<thead><tr><th class="l" style="width:30px"><input type="checkbox" id="chkAll" ${allSel ? "checked" : ""}></th><th class="l">Name</th><th class="l">Anbieter</th><th class="l">Endpoint</th>` +
+    (live ? `<th class="l">Status</th><th>Dauer</th><th>Score</th><th>Ø ms</th>` : "") + `<th></th></tr></thead><tbody>` +
+    vis.map(c => {
+      const it = status.items[c.id], r = resultOf(c.id), [txt, cls] = it ? (STATUS[it.status] || [it.status, "run"]) : ["", ""];
+      const d = it && it.t0 ? ((it.t1 || Date.now() / 1000) - it.t0) : null;
+      const am = r && !r.error ? avg(Object.values(r.matrix || {}), m => m.median) : null;
+      return `<tr><td class="l"><input type="checkbox" data-id="${esc(c.id)}" ${selected.has(c.id) ? "checked" : ""}></td>
+        <td class="l"><b>${esc(c.name)}</b>${c.valid ? "" : ` <span class="chip bad" title="${esc(c.error)}">ungültig</span>`}</td>
+        <td class="l"><span style="color:${pcolor(c.provider)}">●</span> ${esc(c.provider)}</td><td class="l muted">${esc(c.endpoint || "")}</td>` +
+        (live ? `<td class="l">${it ? `<span class="chip ${cls}">${txt}</span> <span class="muted small">${esc(it.status === "done" || it.status === "peering done" ? "" : it.stage || "")}</span>` : '<span class="muted">–</span>'}</td>
+          <td>${d != null ? dur(d) : "–"}</td><td>${r && !r.error ? `<b style="color:${scoreColor(r.score.total)}">${fmt(r.score.total, 1)}</b>` : "–"}</td><td>${fmt(am)}</td>` : "") +
+        `<td><button class="btn sm danger" data-del="${esc(c.id)}" ${status.running ? "disabled" : ""}>Löschen</button></td></tr>`; }).join("") + "</tbody>";
   $("chkAll").onchange = e => { vis.forEach(c => e.target.checked ? selected.add(c.id) : selected.delete(c.id)); renderConfigs(); saveSel(); };
 }
 $("cfgTbl").onclick = async e => {
   const cb = e.target.closest("input[data-id]"); if (cb) { cb.checked ? selected.add(cb.dataset.id) : selected.delete(cb.dataset.id); saveSel(); return; }
   const d = e.target.closest("button[data-del]");
-  if (d && confirm(`„${d.dataset.del}“ wirklich löschen?`)) {
-    try { await api("/api/configs?id=" + encodeURIComponent(d.dataset.del), { method: "DELETE" }); selected.delete(d.dataset.del); loadConfigs(); } catch (er) { toast(er.message); }
-  }
+  if (d && confirm(`„${d.dataset.del}“ wirklich löschen?`)) { try { await api("/api/configs?id=" + encodeURIComponent(d.dataset.del), { method: "DELETE" }); selected.delete(d.dataset.del); loadConfigs(); } catch (er) { toast(er.message); } }
 };
-["q", "provF"].forEach(i => $(i).oninput = renderConfigs);
-$("selVis").onclick = () => { visibleConfigs().forEach(c => selected.add(c.id)); renderConfigs(); saveSel(); };
+$("q").oninput = renderConfigs;
+$("selVis").onclick = () => { visible().forEach(c => selected.add(c.id)); renderConfigs(); saveSel(); };
 $("selNone").onclick = () => { selected.clear(); renderConfigs(); saveSel(); };
 
+/* ---------- upload (buttons + drag&drop anywhere) ---------- */
 async function upload(files) {
   files = [...files].filter(f => f.name.toLowerCase().endsWith(".conf"));
   if (!files.length) return toast("Keine .conf-Dateien gefunden");
-  const fd = new FormData();
-  files.forEach(f => fd.append("files", f, f.webkitRelativePath || f.name));
-  fd.append("provider", $("upProv").value.trim());
-  try {
-    const r = await api("/api/configs/upload", { method: "POST", body: fd });
-    toast(`${r.saved.length} hochgeladen` + (r.errors.length ? `, ${r.errors.length} Fehler: ${r.errors[0]}` : ""));
-    await loadConfigs();
+  const fd = new FormData(); files.forEach(f => fd.append("files", f, f.webkitRelativePath || f.name)); fd.append("provider", $("upProv").value.trim());
+  try { const r = await api("/api/configs/upload", { method: "POST", body: fd });
+    r.saved.forEach(s => selected.add(s.id)); // neu hochgeladene gleich auswählen
+    toast(`${r.saved.length} hochgeladen` + (r.errors.length ? `, ${r.errors.length} Fehler: ${r.errors[0]}` : "")); await loadConfigs();
   } catch (e) { toast("Upload fehlgeschlagen: " + e.message); }
 }
 $("pickFiles").onclick = () => $("fileIn").click(); $("pickDir").onclick = () => $("dirIn").click();
-$("fileIn").onchange = e => { upload(e.target.files); e.target.value = ""; };
-$("dirIn").onchange = e => { upload(e.target.files); e.target.value = ""; };
-const drop = $("drop");
-["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", async e => {
-  const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
-  const out = [];
+$("fileIn").onchange = e => { upload(e.target.files); e.target.value = ""; }; $("dirIn").onchange = e => { upload(e.target.files); e.target.value = ""; };
+let dragN = 0; const ov = $("overlay");
+addEventListener("dragenter", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragN++; ov.classList.add("on"); } });
+addEventListener("dragleave", () => { if (--dragN <= 0) { dragN = 0; ov.classList.remove("on"); } });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", async e => {
+  e.preventDefault(); dragN = 0; ov.classList.remove("on"); showTab("start");
+  const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean), out = [];
   const walk = async (en, path) => {
     if (en.isFile) await new Promise(res => en.file(f => { out.push(new File([f], path + f.name)); res(); }));
-    else { const rd = en.createReader(); let all = [];
-      for (;;) { const b = await new Promise(r => rd.readEntries(r)); if (!b.length) break; all = all.concat(b); }
-      for (const c of all) await walk(c, path + en.name + "/"); }
+    else { const rd = en.createReader(); let all = []; for (;;) { const b = await new Promise(r => rd.readEntries(r)); if (!b.length) break; all = all.concat(b); } for (const c of all) await walk(c, path + en.name + "/"); }
   };
   for (const en of items) await walk(en, "");
   upload(out.length ? out : e.dataTransfer.files);
@@ -288,128 +293,151 @@ drop.addEventListener("drop", async e => {
 
 /* ---------- live status ---------- */
 const STEPS = [["baseline", "Baseline"], ["peering", "Peering"], ["throughput", "Durchsatz"]];
-let lastRunning = false, shownRun = null;
-function chip(st) {
-  const cls = st === "done" || st === "peering done" ? "ok" : /fail|cancel/.test(st) ? "bad" : st === "queued" ? "" : "run";
-  const txt = { queued: "wartet", connecting: "verbindet", peering: "misst", "peering done": "Peering fertig", throughput: "Durchsatz", done: "fertig", failed: "Fehler", "throughput failed": "Durchsatz-Fehler", cancelled: "abgebrochen" }[st] || st;
-  return `<span class="chip ${cls}">${esc(txt)}</span>`;
-}
+let lastRunning = false;
 async function poll() {
   let s; try { s = await api("/api/status"); } catch { return; }
-  const rs = $("runState"); rs.querySelector("i").className = "dot" + (s.running ? " run" : "");
-  rs.querySelector("span").textContent = s.running ? `Läuft: ${({ baseline: "Baseline", peering: "Peering", throughput: "Durchsatz" })[s.phase] || s.phase}` : "Bereit";
-  $("start").hidden = s.running; $("stop").hidden = !s.running;
+  status = s;
+  const rs = $("runState"); rs.querySelector("i").className = "dot" + (s.running ? (s.paused ? " pause" : " run") : "");
+  rs.querySelector("span").textContent = s.running ? (s.paused ? "Pausiert" : `Läuft: ${({ baseline: "Baseline", peering: "Peering", throughput: "Durchsatz" })[s.phase] || s.phase}`) : "Bereit";
+  $("start").hidden = s.running; $("pause").hidden = !s.running; $("stop").hidden = !s.running;
+  $("pause").textContent = s.paused ? "Fortsetzen" : "Pause";
+  ["mode", "parallel", "topn"].forEach(i => $(i).disabled = s.running);
   const hasRun = s.running || s.log.length;
-  $("live").hidden = !hasRun; $("idleHint").hidden = hasRun;
-  if (hasRun) {
-    const order = STEPS.map(x => x[0]), cur = order.indexOf(s.phase);
-    $("steps").innerHTML = STEPS.map(([k, n], i) => `<span class="step ${s.running && i === cur ? "on" : (!s.running || i < cur ? "done" : "")}">${n}</span>`).join("");
+  $("liveBox").hidden = !s.running; $("logCard").hidden = !hasRun; $("pausedBanner").hidden = !s.paused;
+  if (s.running) {
+    const cur = STEPS.map(x => x[0]).indexOf(s.phase);
+    $("steps").innerHTML = STEPS.map(([k, n], i) => `<span class="step ${i === cur ? "on" : i < cur ? "done" : ""}">${n}</span>`).join("");
     $("pct").textContent = Math.round(s.progress) + "%"; $("pbar").style.width = s.progress + "%";
-    $("liveInfo").textContent = `${s.done} / ${s.total} Configs im Peering fertig`;
-    const el = s.started ? (Date.now() / 1000 - s.started) : null;
-    $("elapsed").textContent = s.running && el != null
-      ? `${dur(el)}${s.progress > 8 ? " · noch ca. " + dur(el / s.progress * (100 - s.progress)) : ""}` : "";
-    const names = Object.keys(s.items);
-    $("items").innerHTML = `<thead><tr><th>Config</th><th class="l">Status</th><th class="l">Schritt</th><th>Dauer</th></tr></thead><tbody>` + names.map(n => {
-      const it = s.items[n], d = it.t0 ? ((it.t1 || Date.now() / 1000) - it.t0) : null;
-      return `<tr><td class="l">${esc(n)}</td><td class="l">${chip(it.status)}</td><td class="l muted">${esc(it.stage || "")}</td><td>${d != null ? dur(d) : "–"}</td></tr>`; }).join("") + "</tbody>";
-    const lg = $("log"), atEnd = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 20;
-    lg.textContent = s.log.join("\n"); if (atEnd) lg.scrollTop = lg.scrollHeight;
+    $("liveInfo").textContent = `${s.done}/${s.total} Peering fertig`;
+    const el = s.started ? Date.now() / 1000 - s.started : null;
+    $("elapsed").textContent = el != null ? `· ${dur(el)}${s.progress > 8 && !s.paused ? " · noch ca. " + dur(el / s.progress * (100 - s.progress)) : ""}` : "";
   }
-  if (s.running && s.run_id) { shownRun = s.run_id; if ($("runs").value != s.run_id) await loadRuns(s.run_id); else loadRun(s.run_id, true); }
-  if (lastRunning && !s.running) { await loadRuns(true); toast("Test beendet"); }
+  if (hasRun) { const lg = $("log"), end = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 20; lg.textContent = s.log.join("\n"); if (end) lg.scrollTop = lg.scrollHeight; }
+  if (s.running && s.run_id) { if ($("runs").value != s.run_id) await loadRuns(s.run_id); else await loadRun(s.run_id); }
+  renderConfigs();
+  if (lastRunning && !s.running) { await loadRuns(true); toast("Test beendet. Ergebnisse siehst du im Tab „Ergebnisse“."); }
   lastRunning = s.running;
 }
 $("start").onclick = async () => {
-  try {
-    await api("/api/run", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: $("mode").value, parallel: +$("parallel").value, topn: +$("topn").value, selected: [...selected] }) });
-    poll();
-  } catch (e) { toast(e.message); }
+  if (!configs.length) return toast("Erst Configs hochladen");
+  try { await api("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: $("mode").value, parallel: +$("parallel").value, topn: +$("topn").value, selected: [...selected] }) }); poll(); } catch (e) { toast(e.message); }
 };
-$("stop").onclick = async () => { if (confirm("Test wirklich abbrechen?")) { await api("/api/stop", { method: "POST" }); poll(); } };
+$("pause").onclick = async () => { await api(status.paused ? "/api/resume" : "/api/pause", { method: "POST" }); poll(); };
+$("stop").onclick = async () => { if (confirm("Test wirklich stoppen? Die bisherigen Ergebnisse bleiben erhalten.")) { await api("/api/stop", { method: "POST" }); poll(); } };
 
 /* ---------- results ---------- */
-let current = null, sortKey = "score", sortDir = -1;
+let sortKey = "score", sortDir = -1, hmMode = "ms", hmProv = "", hmTop = 0;
 async function loadRuns(select) {
-  const runs = await api("/api/runs"), sel = $("runs");
-  const keep = typeof select === "number" ? String(select) : sel.value;
+  const runs = await api("/api/runs"), sel = $("runs"), keep = typeof select === "number" ? String(select) : sel.value;
   sel.innerHTML = runs.map(r => `<option value="${r.id}">#${r.id} · ${new Date(r.started * 1000).toLocaleString("de-DE")} · ${r.mode} · ${r.status}</option>`).join("");
-  if (!runs.length) { current = null; return; }
+  if (!runs.length) { current = null; renderResults(); return; }
   sel.value = select === true || !runs.find(r => String(r.id) === keep) ? runs[0].id : keep;
-  await loadRun(sel.value, true);
+  await loadRun(sel.value);
 }
 async function loadRun(id) { current = await api("/api/runs/" + id); renderResults(); }
 $("runs").onchange = e => loadRun(e.target.value);
 
-function colorRtt(v) { if (v == null) return ""; const t = Math.max(0, Math.min(1, (v - 10) / 110)); return `background:hsl(${125 - 125 * t} 60% 45% / .28)`; }
+const colorRtt = v => v == null ? "" : `background:hsl(${125 - 125 * Math.max(0, Math.min(1, (v - 10) / 110))} 60% 45% / .3)`;
 const best = (arr, f, dir = 1) => arr.filter(r => f(r) != null).sort((a, b) => dir * (f(a) - f(b)))[0];
+const avgRtt = r => avg(Object.values(r.matrix || {}), m => m.median);
+
+function ring(score, size) { const c = scoreColor(score); return `<div class="ring" style="--p:${score};--c:${c};${size ? `width:${size}px;height:${size}px` : ""}"><b style="${size ? `width:${size - 20}px;height:${size - 20}px;font-size:${size / 4.2}px` : ""}">${fmt(score, 0)}</b></div>`; }
+
+function scatter(ok, hasTp) {
+  const pts = ok.map(r => ({ r, x: avgRtt(r), y: hasTp ? r.throughput?.dl.mbps : r.score.total })).filter(p => p.x != null && p.y != null);
+  if (pts.length < 2) return `<div class="empty">Zu wenige Messpunkte${hasTp ? " (Durchsatz fehlt)" : ""}.</div>`;
+  const W = 640, H = 300, m = { l: 46, r: 14, t: 12, b: 36 };
+  const xmax = Math.max(...pts.map(p => p.x)) * 1.1, xmin = Math.max(0, Math.min(...pts.map(p => p.x)) * .8), ymax = Math.max(...pts.map(p => p.y)) * 1.1, ymin = 0;
+  const X = v => m.l + (v - xmin) / (xmax - xmin || 1) * (W - m.l - m.r), Y = v => H - m.b - (v - ymin) / (ymax - ymin || 1) * (H - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">`;
+  for (let i = 0; i <= 4; i++) { const yv = ymin + (ymax - ymin) * i / 4, xv = xmin + (xmax - xmin) * i / 4;
+    s += `<line class="gl" x1="${m.l}" x2="${W - m.r}" y1="${Y(yv)}" y2="${Y(yv)}"/><text x="${m.l - 6}" y="${Y(yv) + 4}" text-anchor="end">${fmt(yv)}</text>
+      <text x="${X(xv)}" y="${H - m.b + 16}" text-anchor="middle">${fmt(xv)}</text>`; }
+  s += `<text x="${W / 2}" y="${H - 4}" text-anchor="middle">Ø Latenz zu Peer-Ländern (ms), weiter links ist besser</text>
+    <text transform="rotate(-90)" x="${-H / 2}" y="12" text-anchor="middle">${hasTp ? "Download Mbit/s" : "Score"}</text>`;
+  pts.forEach(p => s += `<circle data-n="${esc(p.r.name)}" cx="${X(p.x)}" cy="${Y(p.y)}" r="7" fill="${pcolor(provOf(p.r.name))}"><title>${esc(p.r.name)}: ${fmt(p.x)} ms · ${fmt(p.y)}${hasTp ? " Mbit/s" : ""}</title></circle>`);
+  return s + "</svg>";
+}
 
 function renderResults() {
-  if (!current) return;
-  const run = current, ok = run.results.filter(r => !r.error), base = run.baseline || {};
+  const body = $("resBody");
+  if (!current || !current.results.length) { body.innerHTML = `<div class="card empty">${current ? "Dieser Lauf hat noch keine Ergebnisse." : "Noch keine Ergebnisse."}</div>`; return; }
+  const run = current, ok = run.results.filter(r => !r.error), bad = run.results.length - ok.length, base = run.baseline || {};
   $("csv").href = `/api/runs/${run.id}/csv`;
   $("baseInfo").textContent = base.dl ? `Baseline ohne VPN: ↓ ${fmt(base.dl.mbps)} / ↑ ${fmt(base.ul.mbps)} Mbit/s` : "";
-  if (!run.results.length) { $("resBody").innerHTML = `<div class="card empty">Dieser Lauf hat noch keine Ergebnisse.</div>`; return; }
-  const countries = [...new Set(ok.flatMap(r => Object.keys(r.matrix || {})))].sort();
-  const bestScore = best(ok, r => r.score.total, -1), bestDl = best(ok, r => r.throughput?.dl.mbps, -1);
-  const bestRtt = best(ok, r => { const m = Object.values(r.matrix || {}).map(x => x.median).filter(x => x != null); return m.length ? m.reduce((a, b) => a + b) / m.length : null; });
-  const avgRtt = r => { const m = Object.values(r.matrix || {}).map(x => x.median).filter(x => x != null); return m.length ? m.reduce((a, b) => a + b) / m.length : null; };
-  const swarmAvg = ok.length ? ok.reduce((a, r) => a + (r.swarm?.success || 0), 0) / ok.length * 100 : null;
-  let h = `<div class="kpis">
-    <div class="kpi"><div class="l">Bester Gesamtscore</div><div class="v">${bestScore ? fmt(bestScore.score.total, 1) : "–"}</div><div class="s">${esc(bestScore?.name || "")}</div></div>
-    <div class="kpi"><div class="l">Niedrigste Ø-Latenz Peer-Länder</div><div class="v">${bestRtt ? fmt(avgRtt(bestRtt)) + " ms" : "–"}</div><div class="s">${esc(bestRtt?.name || "")}</div></div>
-    <div class="kpi"><div class="l">Schnellster Download</div><div class="v">${bestDl ? fmt(bestDl.throughput.dl.mbps) + " Mbit/s" : "–"}</div><div class="s">${esc(bestDl?.name || "nicht gemessen")}</div></div>
-    <div class="kpi"><div class="l">Ø Swarm-Erfolg</div><div class="v">${fmt(swarmAvg)}%</div><div class="s">${ok.length} OK · ${run.results.length - ok.length} Fehler</div></div></div>`;
+  const countries = [...new Set(ok.flatMap(r => Object.keys(r.matrix || {})))].sort(), hasTp = ok.some(r => r.throughput);
+  const baseAvg = avg(Object.values(base.matrix || {}), m => m.median);
+  let h = "";
 
-  // ranking bars + provider + best per country
-  const top = ok.slice(0, 12);
-  h += `<div class="grid2"><div class="card"><h2>Ranking (Top ${top.length})</h2>${top.map(r => `<div class="hl"><span class="n" title="${esc(r.name)}">${esc(r.name)}</span><div class="bar"><i style="width:${r.score.total}%"></i></div><span class="v">${fmt(r.score.total, 1)}</span></div>`).join("") || '<div class="muted">–</div>'}</div>`;
-  const byP = {}; ok.forEach(r => { const p = r.name.includes("/") ? r.name.split("/")[0] : "(root)"; (byP[p] ||= []).push(r); });
-  h += `<div class="card"><h2>Anbieter im Vergleich</h2><table><thead><tr><th>Anbieter</th><th>Configs</th><th>Ø Score</th><th>Ø Latenz</th><th>Ø Swarm</th></tr></thead><tbody>` +
+  // podium
+  h += `<div class="podium">` + ok.slice(0, 3).map((r, i) => { const e = r.exit || {};
+    return `<div class="pod ${i === 0 ? "first" : ""}" data-n="${esc(r.name)}"><span class="rank">PLATZ ${i + 1}</span>${ring(r.score.total)}
+      <div style="min-width:0"><h3 title="${esc(r.name)}">${esc(shortName(r.name))}</h3><div class="muted small">${esc(provOf(r.name))} · Exit ${esc(e.city || "")} ${esc(e.country || "")}</div>
+      <div class="facts"><span>Ø Latenz</span><b>${fmt(avgRtt(r))} ms</b><span>Swarm</span><b>${fmt((r.swarm?.success || 0) * 100)}%</b><span>Download</span><b>${r.throughput ? fmt(r.throughput.dl.mbps) + " Mbit/s" : "–"}</b><span>Handshake</span><b>${fmt(r.handshake_s, 2)} s</b></div></div></div>`; }).join("") + `</div>`;
+
+  // stats
+  const bestRtt = best(ok, avgRtt), bestDl = best(ok, r => r.throughput?.dl.mbps, -1);
+  h += `<div class="stats">
+    <div class="stat"><div class="l">Getestet</div><div class="v">${run.results.length}</div><div class="small muted">${ok.length} OK${bad ? ` · <span style="color:var(--bad)">${bad} Fehler</span>` : ""}</div></div>
+    <div class="stat"><div class="l">Niedrigste Ø-Latenz</div><div class="v">${bestRtt ? fmt(avgRtt(bestRtt)) + " ms" : "–"}</div><div class="small muted">${esc(bestRtt ? shortName(bestRtt.name) : "")}${baseAvg != null ? ` · ohne VPN ${fmt(baseAvg)} ms` : ""}</div></div>
+    <div class="stat"><div class="l">Schnellster Download</div><div class="v">${bestDl ? fmt(bestDl.throughput.dl.mbps) : "–"}<span class="small muted"> Mbit/s</span></div><div class="small muted">${esc(bestDl ? shortName(bestDl.name) : "nicht gemessen")}${base.dl ? ` · ohne VPN ${fmt(base.dl.mbps)}` : ""}</div></div>
+    <div class="stat"><div class="l">Ø Swarm-Erfolg</div><div class="v">${fmt(avg(ok, r => (r.swarm?.success || 0) * 100))}%</div><div class="small muted">100 parallele Verbindungen</div></div></div>`;
+
+  // best per country
+  h += `<div class="card"><h2>Bester Exit pro Peer-Land</h2><div class="bests">` + countries.map(c => { const b = best(ok, r => r.matrix?.[c]?.median), bm = base.matrix?.[c]?.median;
+    return `<div class="best"><b>${c}</b> <span class="muted small">${fmt(b?.matrix?.[c]?.median)} ms${bm != null ? ` · direkt ${fmt(bm)}` : ""}</span><div class="n" title="${esc(b?.name || "")}">${esc(b ? shortName(b.name) : "–")}</div></div>`; }).join("") + `</div></div>`;
+
+  // scatter + providers
+  const byP = {}; ok.forEach(r => (byP[provOf(r.name)] ||= []).push(r));
+  h += `<div class="grid2"><div class="card"><h2>${hasTp ? "Latenz vs. Download" : "Latenz vs. Score"}</h2>${scatter(ok, hasTp)}
+      <div class="row small muted" style="margin-top:4px">${Object.keys(byP).map(p => `<span><span style="color:${pcolor(p)}">●</span> ${esc(p)}</span>`).join("")}</div></div>
+    <div class="card"><h2>Anbieter im Vergleich</h2><table><thead><tr><th class="l">Anbieter</th><th>Configs</th><th>Ø Score</th><th>Ø Latenz</th><th>Ø Swarm</th><th>Ø ↓</th></tr></thead><tbody>` +
     Object.entries(byP).sort((a, b) => avg(b[1], r => r.score.total) - avg(a[1], r => r.score.total)).map(([p, rs]) =>
-      `<tr><td>${esc(p)}</td><td>${rs.length}</td><td>${fmt(avg(rs, r => r.score.total), 1)}</td><td>${fmt(avg(rs, avgRtt))} ms</td><td>${fmt(avg(rs, r => (r.swarm?.success || 0) * 100))}%</td></tr>`).join("") + `</tbody></table></div>`;
-  h += `<div class="card"><h2>Bester Exit pro Peer-Land</h2><table><thead><tr><th>Land</th><th class="l">Config</th><th>RTT</th><th>Baseline</th></tr></thead><tbody>` +
-    countries.map(c => { const b = best(ok, r => r.matrix?.[c]?.median); return `<tr><td>${c}</td><td class="l">${esc(b?.name || "–")}</td><td>${fmt(b?.matrix?.[c]?.median)} ms</td><td class="muted">${fmt(base.matrix?.[c]?.median)} ms</td></tr>`; }).join("") + `</tbody></table></div></div>`;
+      `<tr><td class="l"><span style="color:${pcolor(p)}">●</span> ${esc(p)}</td><td>${rs.length}</td><td><b style="color:${scoreColor(avg(rs, r => r.score.total))}">${fmt(avg(rs, r => r.score.total), 1)}</b></td><td>${fmt(avg(rs, avgRtt))} ms</td><td>${fmt(avg(rs, r => (r.swarm?.success || 0) * 100))}%</td><td>${fmt(avg(rs, r => r.throughput?.dl.mbps))}</td></tr>`).join("") + `</tbody></table></div></div>`;
 
-  // main table
+  // heatmap
+  let rows = run.results.filter(r => !hmProv || provOf(r.name) === hmProv);
   const val = r => ({ name: r.name, score: r.score.total, dl: r.throughput?.dl.mbps, ul: r.throughput?.ul.mbps, swarm: r.swarm?.success, hs: r.handshake_s, avg: avgRtt(r) }[sortKey] ?? r.matrix?.[sortKey]?.median ?? -1);
-  const rs = run.results.slice().sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortDir);
-  const th = (k, t) => `<th data-k="${k}">${t}${sortKey === k ? (sortDir < 0 ? " ▾" : " ▴") : ""}</th>`;
-  h += `<div class="card"><h2>Alle Configs <span class="muted small" style="text-transform:none;letter-spacing:0">· Zeile anklicken für Details · Spalten sortierbar</span></h2><div class="scroll"><table id="resTbl"><thead><tr>` +
-    th("name", "Config") + th("score", "Score") + `<th class="l">Exit</th>` + countries.map(c => th(c, c + " ms")).join("") + th("avg", "Ø ms") + th("swarm", "Swarm") + th("hs", "HS s") + th("dl", "↓ Mbit/s") + th("ul", "↑ Mbit/s") + `</tr></thead><tbody>`;
-  if (Object.keys(base.matrix || {}).length) h += `<tr class="muted"><td>Baseline (ohne VPN)</td><td></td><td></td>${countries.map(c => `<td>${fmt(base.matrix[c]?.median)}</td>`).join("")}<td></td><td></td><td></td><td>${fmt(base.dl?.mbps)}</td><td>${fmt(base.ul?.mbps)}</td></tr>`;
-  for (const r of rs) {
-    if (r.error) { h += `<tr class="click" data-n="${esc(r.name)}"><td>${esc(r.name)}</td><td colspan="${countries.length + 7}" class="l"><span class="chip bad">Fehler</span> <span class="muted">${esc(r.error)}</span></td></tr>`; continue; }
-    const e = r.exit || {};
-    h += `<tr class="click" data-n="${esc(r.name)}"><td class="l"><b>${esc(r.name)}</b></td><td><b>${fmt(r.score.total, 1)}</b></td><td class="l muted">${esc(e.country || "")} ${esc(e.city || "")}</td>` +
-      countries.map(c => { const m = r.matrix?.[c]; return `<td style="${colorRtt(m?.median)}" title="Loss ${fmt((m?.loss || 0) * 100)}%">${fmt(m?.median)}</td>`; }).join("") +
-      `<td>${fmt(avgRtt(r))}</td><td>${r.swarm ? fmt(r.swarm.success * 100) + "%" : "–"}</td><td>${fmt(r.handshake_s, 1)}</td><td>${fmt(r.throughput?.dl.mbps)}</td><td>${fmt(r.throughput?.ul.mbps)}</td></tr>`;
+  rows.sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * sortDir);
+  if (hmTop) rows = rows.slice(0, hmTop);
+  const th = (k, t) => `<th data-k="${k}" class="${k === "name" ? "l" : ""}">${t}${sortKey === k ? (sortDir < 0 ? " ▾" : " ▴") : ""}</th>`;
+  h += `<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">Alle Configs · Peering-Heatmap</h2><span class="spacer"></span>
+    <select id="hmProv"><option value="">Alle Anbieter</option>${Object.keys(byP).map(p => `<option ${p === hmProv ? "selected" : ""}>${esc(p)}</option>`).join("")}</select>
+    <select id="hmTop"><option value="0">Alle</option><option value="10" ${hmTop === 10 ? "selected" : ""}>Top 10</option><option value="20" ${hmTop === 20 ? "selected" : ""}>Top 20</option></select>
+    <select id="hmMode"><option value="ms">Werte in ms</option><option value="delta" ${hmMode === "delta" ? "selected" : ""}>Δ zur Baseline</option></select></div>
+    <div class="scroll"><table class="hm"><thead><tr>${th("name", "Config")}${th("score", "Score")}` + countries.map(c => th(c, c)).join("") + th("avg", "Ø ms") + th("swarm", "Swarm") + th("hs", "HS s") + th("dl", "↓") + th("ul", "↑") + `</tr></thead><tbody>`;
+  if (Object.keys(base.matrix || {}).length) h += `<tr class="muted"><td class="l">Baseline (ohne VPN)</td><td></td>${countries.map(c => `<td class="c">${fmt(base.matrix[c]?.median)}</td>`).join("")}<td class="c">${fmt(baseAvg)}</td><td></td><td></td><td>${fmt(base.dl?.mbps)}</td><td>${fmt(base.ul?.mbps)}</td></tr>`;
+  for (const r of rows) {
+    if (r.error) { h += `<tr class="click" data-n="${esc(r.name)}"><td class="l">${esc(r.name)}</td><td colspan="${countries.length + 6}" class="l"><span class="chip bad">Fehler</span> <span class="muted small">${esc(r.error)}</span></td></tr>`; continue; }
+    h += `<tr class="click" data-n="${esc(r.name)}"><td class="l"><span style="color:${pcolor(provOf(r.name))}">●</span> <b>${esc(shortName(r.name))}</b></td><td><b style="color:${scoreColor(r.score.total)}">${fmt(r.score.total, 1)}</b></td>` +
+      countries.map(c => { const v = r.matrix?.[c]?.median, b = base.matrix?.[c]?.median, show = hmMode === "delta" && v != null && b != null ? (v - b > 0 ? "+" : "") + fmt(v - b) : fmt(v);
+        return `<td class="c" style="${colorRtt(v)}" title="${esc(c)}: ${fmt(v)} ms · Loss ${fmt((r.matrix?.[c]?.loss || 0) * 100)}%">${show}</td>`; }).join("") +
+      `<td class="c">${fmt(avgRtt(r))}</td><td>${r.swarm ? fmt(r.swarm.success * 100) + "%" : "–"}</td><td>${fmt(r.handshake_s, 2)}</td><td>${fmt(r.throughput?.dl.mbps)}</td><td>${fmt(r.throughput?.ul.mbps)}</td></tr>`;
   }
-  h += `</tbody></table></div></div>`;
-  $("resBody").innerHTML = h;
+  body.innerHTML = h + `</tbody></table></div><div class="small muted" style="margin-top:8px">Zeile anklicken für Details, Spaltenkopf zum Sortieren. Grün = niedrige Latenz, Rot = hohe.</div></div>`;
+  $("hmProv").onchange = e => { hmProv = e.target.value; renderResults(); };
+  $("hmTop").onchange = e => { hmTop = +e.target.value; renderResults(); };
+  $("hmMode").onchange = e => { hmMode = e.target.value; renderResults(); };
 }
-const avg = (a, f) => { const v = a.map(f).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((x, y) => x + y) / v.length : null; };
 $("resBody").onclick = e => {
   const t = e.target.closest("th[data-k]"); if (t) { sortDir = sortKey === t.dataset.k ? -sortDir : -1; sortKey = t.dataset.k; renderResults(); return; }
-  const tr = e.target.closest("tr[data-n]"); if (tr) detail(tr.dataset.n);
+  const n = e.target.closest("[data-n]"); if (n) detail(n.dataset.n);
 };
 function detail(name) {
-  const r = current.results.find(x => x.name === name); if (!r) return;
-  const e = r.exit || {}, s = r.score;
+  const r = current.results.find(x => x.name === name); if (!r) return; const e = r.exit || {}, s = r.score;
   let h = `<h3 style="margin:0 0 4px">${esc(r.name)}</h3><div class="muted small">Exit ${esc(e.ip || "–")} · ${esc(e.city || "")} ${esc(e.country || "")} · ${esc(e.org || "")}</div>`;
   if (r.error) h += `<p><span class="chip bad">Fehler</span> ${esc(r.error)}</p>`;
-  else {
-    h += `<div class="kpis" style="margin:12px 0"><div class="kpi"><div class="l">Gesamt</div><div class="v">${fmt(s.total, 1)}</div></div><div class="kpi"><div class="l">Peering</div><div class="v">${fmt(s.peering, 1)}</div></div><div class="kpi"><div class="l">Swarm</div><div class="v">${fmt(s.swarm)}%</div></div><div class="kpi"><div class="l">Zuverlässigkeit</div><div class="v">${fmt(s.reliability)}</div></div></div>
-    <div class="small muted" style="margin-bottom:8px">Handshake ${fmt(r.handshake_s, 1)} s · MTU 1420 ${r.mtu_ok ? "ok" : "Fragmentierung"} · IPv6 ${r.ipv6 ? "ja" : "nein"} · DNS ${r.dns_ok ? fmt(r.dns_ms) + " ms" : "Fehler"}${r.throughput ? ` · ↓ ${fmt(r.throughput.dl.mbps)} (Stabilität ${fmt(r.throughput.dl.stability * 100)}%) / ↑ ${fmt(r.throughput.ul.mbps)} Mbit/s` : ""}</div>
-    <div class="scroll"><table><thead><tr><th>Land</th><th>Median</th><th>Loss</th><th class="l">Ziele (ms)</th></tr></thead><tbody>` +
-      Object.entries(r.matrix || {}).sort().map(([c, m]) => `<tr><td>${c}</td><td style="${colorRtt(m.median)}">${fmt(m.median)}</td><td>${fmt(m.loss * 100)}%</td><td class="l muted small">${Object.entries(m.targets).map(([h, t]) => `${esc(h.replace(/^www\./, ""))} ${fmt(t.median)}`).join(" · ")}</td></tr>`).join("") + `</tbody></table></div>`;
-  }
+  else h += `<div class="row" style="margin:14px 0;gap:18px">${ring(s.total, 96)}<div class="stats" style="flex:1;margin:0">
+      <div class="stat"><div class="l">Peering</div><div class="v">${fmt(s.peering, 0)}</div></div><div class="stat"><div class="l">Swarm</div><div class="v">${fmt(s.swarm)}%</div></div>
+      <div class="stat"><div class="l">Zuverlässigkeit</div><div class="v">${fmt(s.reliability)}</div></div><div class="stat"><div class="l">Durchsatz</div><div class="v">${s.throughput == null ? "–" : fmt(s.throughput)}</div></div></div></div>
+    <div class="small muted" style="margin-bottom:8px">Handshake ${fmt(r.handshake_s, 2)} s · MTU 1420 ${r.mtu_ok ? "ok" : "Fragmentierung"} · IPv6 ${r.ipv6 ? "ja" : "nein"} · DNS ${r.dns_ok ? fmt(r.dns_ms) + " ms" : "Fehler"}${r.throughput ? ` · ↓ ${fmt(r.throughput.dl.mbps)} (Stabilität ${fmt(r.throughput.dl.stability * 100)}%) / ↑ ${fmt(r.throughput.ul.mbps)} Mbit/s` : ""}</div>
+    <div class="scroll"><table><thead><tr><th class="l">Land</th><th>Median</th><th>Loss</th><th class="l">Ziele (ms)</th></tr></thead><tbody>` +
+    Object.entries(r.matrix || {}).sort().map(([c, m]) => `<tr><td class="l">${c}</td><td style="${colorRtt(m.median)}">${fmt(m.median)}</td><td>${fmt(m.loss * 100)}%</td><td class="l muted small">${Object.entries(m.targets).map(([h, t]) => `${esc(h.replace(/^www\./, ""))} ${fmt(t.median)}`).join(" · ")}</td></tr>`).join("") + `</tbody></table></div>`;
   $("dlgBody").innerHTML = h; $("dlg").showModal();
 }
 $("dlgClose").onclick = () => $("dlg").close();
 
-/* ---------- settings / version ---------- */
+/* ---------- settings ---------- */
 async function loadVersion(force) {
   let v; try { v = await api("/api/version" + (force ? "?force=true" : "")); } catch { return; }
   $("ver").textContent = `v${v.version} · ${v.sha}`; $("ver").title = v.built ? "Gebaut: " + v.built : "";
@@ -417,12 +445,9 @@ async function loadVersion(force) {
   if (v.status === "update") { u.classList.add("update"); u.textContent = "Update verfügbar"; u.onclick = () => showTab("settings"); }
   else if (v.status === "current") { u.classList.add("current"); u.textContent = "Aktuell"; }
   else { u.textContent = v.status === "dev" ? "Dev-Build" : "Update-Check inaktiv"; u.onclick = () => showTab("settings"); }
-  const col = { update: "var(--warn)", current: "var(--good)" }[v.status] || "var(--muted)";
-  $("verBox").innerHTML = `<div><b style="color:var(--fg)">Version ${esc(v.version)}</b> · Commit <code>${esc(v.sha)}</code>${v.built ? " · gebaut " + esc(v.built) : ""}</div>
-    <div style="margin-top:6px;color:${col}">${esc(v.detail)}${v.latest && v.status === "update" ? "" : ""}</div>`;
+  $("verBox").innerHTML = `<div><b style="color:var(--fg)">Version ${esc(v.version)}</b> · Commit <code>${esc(v.sha)}</code>${v.built ? " · gebaut " + esc(v.built) : ""}</div><div style="margin-top:6px;color:${{ update: "var(--warn)", current: "var(--good)" }[v.status] || "var(--muted)"}">${esc(v.detail)}</div>`;
 }
 $("recheck").onclick = async () => { await loadVersion(true); toast("Update-Check aktualisiert"); };
-
 async function loadWeights() {
   const w = (await api("/api/settings")).weights;
   $("weights").innerHTML = Object.entries(w).map(([c, v]) => `<label class="f">${c}<input data-c="${c}" type="number" step="0.5" min="0" value="${v}" style="width:80px"></label>`).join("");
@@ -434,9 +459,8 @@ $("saveW").onclick = async () => {
 };
 
 /* ---------- init ---------- */
-showTab(store.get("tab", "test"));
-loadConfigs(); loadWeights(); loadVersion(); loadRuns(true);
-poll(); setInterval(poll, 1500);
+showTab(["start", "results", "settings"].includes(store.get("tab", "start")) ? store.get("tab", "start") : "start");
+loadConfigs(); loadWeights(); loadVersion(); loadRuns(true); poll(); setInterval(poll, 1500);
 </script>
 </body>
 </html>

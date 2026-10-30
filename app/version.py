@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 GIT_SHA = os.environ.get("GIT_SHA", "dev")
 BUILD_DATE = os.environ.get("BUILD_DATE", "")
 REPO = os.environ.get("GITHUB_REPO", "mlo-Tek/vpn-benchmark")

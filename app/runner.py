@@ -15,9 +15,11 @@ WORKER = str(Path(__file__).with_name("worker.py"))
 BUNDLED_TARGETS = Path(__file__).with_name("targets.yaml")
 
 # Live state polled by the UI.
-STATE = {"running": False, "run_id": None, "mode": None, "phase": "idle", "items": {},
+STATE = {"paused": False, "running": False, "run_id": None, "mode": None, "phase": "idle", "items": {},
          "log": [], "started": None, "progress": 0, "total": 0, "done": 0}
 TASK = None
+GATE = asyncio.Event()  # cleared while paused; waiting configs don't start until it is set
+GATE.set()
 
 
 def log(msg):
@@ -27,7 +29,9 @@ def log(msg):
 def load_targets():
     path = db.DATA / "targets.yaml"
     data = yaml.safe_load((path if path.exists() else BUNDLED_TARGETS).read_text())["targets"]
-    return [{"country": cc, "host": h} for cc, hosts in data.items() for h in hosts]
+    # YAML 1.1 reads an unquoted NO as False, so user-supplied files may still contain it.
+    fix = lambda cc: "NO" if cc is False else str(cc)  # noqa: E731
+    return [{"country": fix(cc), "host": h} for cc, hosts in data.items() for h in hosts]
 
 
 def list_configs():
@@ -97,6 +101,22 @@ def start(mode, parallel, topn, selected=None, providers=None):
     TASK = asyncio.create_task(run_benchmark(mode, parallel, topn, selected, providers))
 
 
+def pause():
+    if STATE["running"]:
+        GATE.clear()
+        STATE["paused"] = True
+        log("Pausiert: bereits laufende Configs werden noch fertig, neue starten nicht")
+    return STATE["paused"]
+
+
+def resume():
+    GATE.set()
+    if STATE["paused"]:
+        STATE["paused"] = False
+        log("Fortgesetzt")
+    return True
+
+
 def stop():
     if TASK and not TASK.done():
         TASK.cancel()
@@ -107,7 +127,8 @@ def stop():
 async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
     """mode: peering | standard | full"""
     STATE.update(running=True, mode=mode, phase="baseline", items={}, log=[],
-                 started=time.time(), progress=0, total=0, done=0)
+                 started=time.time(), progress=0, total=0, done=0, paused=False)
+    GATE.set()
     run_id = db.new_run(mode)
     STATE["run_id"] = run_id
     baseline, status = {}, "done"
@@ -138,6 +159,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
 
         async def one(i, p):
             async with sem:
+                await GATE.wait()
                 r = await test_peering(p, i, targets)
                 results[cid(p)] = r
                 db.save_result(run_id, cid(p), r)
@@ -154,6 +176,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
             todo = ranked if mode == "full" else ranked[:topn]
             log(f"Durchsatz für {len(todo)} Configs")
             for n, p in enumerate(todo):
+                await GATE.wait()
                 set_item(cid(p), status="throughput", stage="Download/Upload messen", t1=None)
                 try:
                     results[cid(p)]["throughput"] = await test_throughput(p, 0, 8)
@@ -176,5 +199,6 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None):
         status = "failed"
     finally:
         db.finish_run(run_id, baseline, status)
-        STATE.update(running=False, phase="idle")
+        GATE.set()
+        STATE.update(running=False, phase="idle", paused=False)
         log("Fertig" if status == "done" else f"Beendet ({status})")

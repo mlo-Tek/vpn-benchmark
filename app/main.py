@@ -79,6 +79,16 @@ def stop():
     return {"stopped": runner.stop()}
 
 
+@app.post("/api/pause")
+def pause():
+    return {"paused": runner.pause()}
+
+
+@app.post("/api/resume")
+def resume():
+    return {"paused": not runner.resume()}
+
+
 @app.get("/api/version")
 async def get_version(force: bool = False):
     return await version.check(force)
