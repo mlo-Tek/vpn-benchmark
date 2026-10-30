@@ -1,6 +1,7 @@
 """Orchestrates a benchmark run: baseline -> parallel peering phase -> serial throughput."""
 import asyncio
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -53,6 +54,32 @@ def load_regions():
             for cc, srv in data.items()}
 
 
+def list_bittorrent_peers():
+    """Optional, consent-based peer list for a legal test torrent."""
+    path = db.DATA / "bittorrent.yaml"
+    if not path.exists():
+        return []
+    raw = yaml.safe_load(path.read_text()) or {}
+    peers = raw.get("peers", [])
+    if not isinstance(peers, list) or len(peers) > 25:
+        raise ValueError("bittorrent.yaml: expected up to 25 peers")
+    out = []
+    for p in peers:
+        if not isinstance(p, dict):
+            raise ValueError("bittorrent.yaml: invalid peer")
+        host, infohash = str(p.get("host", "")), str(p.get("infohash", ""))
+        try:
+            port = int(p["port"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("bittorrent.yaml: invalid port") from None
+        if not host or len(host) > 253 or any(c.isspace() for c in host) or not 1 <= port <= 65535:
+            raise ValueError("bittorrent.yaml: invalid host/port")
+        if not re.fullmatch(r"[A-Fa-f0-9]{40}", infohash):
+            raise ValueError("bittorrent.yaml: infohash must be 40 hexadecimal digits")
+        out.append({"host": host, "port": port, "infohash": infohash})
+    return out
+
+
 def list_configs():
     return list_paths()
 
@@ -72,7 +99,7 @@ def set_progress(mode, p1, p2):
     STATE["progress"] = round(5 + (95 * p1 if mode == "peering" else 40 * p1 + 55 * p2), 1)
 
 
-async def test_peering(path, idx, targets):
+async def test_peering(path, idx, targets, bt_peers=None):
     name = cid(path)
     t0 = time.time()
     set_item(name, status="connecting", stage="Tunnel aufbauen", t0=t0)
@@ -103,7 +130,15 @@ async def test_peering(path, idx, targets):
         info = await info_task
         set_item(name, stage="Swarm-Test (100 Verbindungen)")
         sw = await t.worker("swarm", {"targets": targets, "total": 100})
-        ev(f"Swarm: {round(sw['success'] * 100)}% der 100 Verbindungen erfolgreich")
+        ev(f"TCP-Swarm: {round(sw['success'] * 100)}% der 100 Verbindungen erfolgreich")
+        if bt_peers:
+            set_item(name, stage="Echte BitTorrent-Peer-Handshakes (optional)")
+            try:
+                bt = await t.worker("bittorrent", {"peers": bt_peers}, timeout=60)
+                result["bittorrent"] = bt
+                ev(f"BitTorrent: {round(bt['success'] * 100)}% von {bt['total']} Peer-Handshakes erfolgreich")
+            except Exception as e:
+                ev(f"BitTorrent-Zusatztest fehlgeschlagen: {str(e)[:120]}")
         result.update(exit={k: info.get(k) for k in ("ip", "country", "city", "org")},
                       ipv6=info.get("ipv6"), dns_ok=info.get("dns_ok"),
                       dns_ms=info.get("dns_ms"), matrix=scoring.country_stats(matrix),
@@ -217,6 +252,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_
             + (", Länder-Durchsatz an" if regions and mode != "peering" else ""))
         region_cfg = load_regions() if regions and mode != "peering" else None
         targets = load_targets()
+        bt_peers = list_bittorrent_peers()
         weights = db.get_setting("weights", scoring.DEFAULT_WEIGHTS)
         profile = db.get_setting("profile", scoring.DEFAULT_PROFILE)
 
@@ -239,7 +275,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_
         async def one(i, p):
             async with sem:
                 await GATE.wait()
-                r = await test_peering(p, i, targets)
+                r = await test_peering(p, i, targets, bt_peers)
                 results[cid(p)] = r
                 db.save_result(run_id, cid(p), r)
                 STATE["done"] += 1
