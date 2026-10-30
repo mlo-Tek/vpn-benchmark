@@ -60,6 +60,8 @@ Für die normale Installation muss kein Port im Router weitergeleitet werden. **
 
 Konfigurationen können über die Weboberfläche hochgeladen oder lokal unter configs/ abgelegt werden. Die Dateien sind wegen enthaltenen privaten WireGuard-Schlüsseln vertraulich. Der Container benötigt für Upload und Löschen Schreibzugriff auf configs/; data/ enthält die SQLite-Ergebnisse und optionale Messziele.
 
+Die Web-API schützt zustandsverändernde Aufrufe (POST, PUT, PATCH, DELETE) mit dem Header `X-VPN-Benchmark-Request: 1`. Die Weboberfläche setzt ihn automatisch. Eigene API-Clients müssen ihn ebenfalls senden. Dies verhindert einfache browserbasierte Cross-Site-Requests, **ist aber kein Ersatz für Authentifizierung oder eine private Netzwerkanbindung**. Uploads sind auf 100 Konfigurationsdateien je Anfrage und maximal 64 KiB je Datei begrenzt.
+
 ## Testphasen und Aussagekraft
 
 1. **Baseline:** Vergleichsmessung ohne VPN, auf dem Docker-Host.

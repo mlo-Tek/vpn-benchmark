@@ -277,11 +277,11 @@ def test_profile_settings_validate_input(tmp_path, monkeypatch):
     monkeypatch.delenv("VPN_BENCHMARK_USER", raising=False)
     monkeypatch.delenv("VPN_BENCHMARK_PASSWORD", raising=False)
     with TestClient(app) as client:
-        assert client.put("/api/settings", json={"weights": {"DE": 1}, "profile": "seeding"}).status_code == 200
+        assert client.put("/api/settings", headers={"X-VPN-Benchmark-Request": "1"}, json={"weights": {"DE": 1}, "profile": "seeding"}).status_code == 200
         assert client.get("/api/settings").json()["profile"] == "seeding"
-        assert client.put("/api/settings", json={"weights": {"DE": 1}, "profile": "invalid"}).status_code == 400
-        assert client.put("/api/settings", json={"weights": {"DE": -1}}).status_code == 400
-        assert client.put("/api/settings", json={"weights": {"DE": 0}}).status_code == 400
+        assert client.put("/api/settings", headers={"X-VPN-Benchmark-Request": "1"}, json={"weights": {"DE": 1}, "profile": "invalid"}).status_code == 400
+        assert client.put("/api/settings", headers={"X-VPN-Benchmark-Request": "1"}, json={"weights": {"DE": -1}}).status_code == 400
+        assert client.put("/api/settings", headers={"X-VPN-Benchmark-Request": "1"}, json={"weights": {"DE": 0}}).status_code == 400
 
 
 def test_optional_bittorrent_peer_config(tmp_path, monkeypatch):
@@ -335,3 +335,32 @@ def test_zero_weight_country_not_counted_as_worst():
     only_de = {**r, "matrix": {"DE": matrix["DE"]}}
     weights = {"DE": 1, "NO": 0}
     assert scoring.score(r, weights)["peering"] == scoring.score(only_de, weights)["peering"]
+
+
+def test_mutations_require_anti_csrf_header(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    monkeypatch.delenv("VPN_BENCHMARK_USER", raising=False)
+    monkeypatch.delenv("VPN_BENCHMARK_PASSWORD", raising=False)
+    with TestClient(app) as client:
+        assert client.post("/api/stop").status_code == 403
+        assert client.post("/api/stop", headers={"X-VPN-Benchmark-Request": "1"}).status_code == 200
+        assert client.put("/api/settings", json={"weights": {"DE": 1}}).status_code == 403
+
+
+def test_uploaded_config_is_bounded(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import db, runner
+    from app.main import app
+    monkeypatch.setattr(db, "CONFIGS", tmp_path)
+    monkeypatch.delenv("VPN_BENCHMARK_USER", raising=False)
+    monkeypatch.delenv("VPN_BENCHMARK_PASSWORD", raising=False)
+    runner.STATE["running"] = False
+    with TestClient(app) as client:
+        response = client.post("/api/configs/upload",
+            files={"files": ("huge.conf", b"X" * (64 * 1024 + 1), "application/octet-stream")},
+            headers={"X-VPN-Benchmark-Request": "1"})
+        assert response.status_code == 200
+        data = response.json()
+        assert not data["saved"] and len(data["errors"]) == 1
+        assert not list(tmp_path.rglob("*.conf"))

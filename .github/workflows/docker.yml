@@ -7,9 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Pull requests execute untrusted code: never grant package-write globally.
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
@@ -27,6 +27,9 @@ jobs:
   docker:
     needs: test
     if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
