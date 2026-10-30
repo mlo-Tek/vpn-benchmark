@@ -218,6 +218,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_
         region_cfg = load_regions() if regions and mode != "peering" else None
         targets = load_targets()
         weights = db.get_setting("weights", scoring.DEFAULT_WEIGHTS)
+        profile = db.get_setting("profile", scoring.DEFAULT_PROFILE)
 
         log("Baseline ohne VPN")
         try:
@@ -250,7 +251,7 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_
             STATE["phase"] = "throughput"
             ranked = sorted(
                 (p for p in configs if not results[cid(p)].get("error")),
-                key=lambda p: -scoring.score(results[cid(p)], weights)["total"])
+                key=lambda p: -scoring.score(results[cid(p)], weights, baseline, profile)["total"])
             todo = ranked if mode == "full" else ranked[:topn]
             log(f"Durchsatz für {len(todo)} Configs")
             for n, p in enumerate(todo):
