@@ -1,0 +1,32 @@
+# Public iPerf3 servers per peer country, tried in order (first one that works is used).
+# Country codes are quoted on purpose (unquoted NO is parsed as boolean false).
+# Override by placing your own copy at /data/regions.yaml.
+# Sources: the server list of the VPN-Exit-Bench project and github.com/R0GGER/public-iperf3-servers;
+# every host was checked for a reachable iPerf3 port before it went in here.
+# Public servers come and go, and many of them only run a few ports; `ports` may be a number
+# or a range. Large ranges are probed first and only open ports are used.
+regions:
+  "NO":
+    - {host: lg.gigahost.no, ports: "9201-9240"}
+  "NL":
+    - {host: iperf.worldstream.nl, ports: "5201-5205"}
+    - {host: ams.speedtest.clouvider.net, ports: "5200-5209"}
+    - {host: speedtest.ams1.nl.leaseweb.net, ports: "5201-5210"}
+  "DE":
+    - {host: fra.speedtest.clouvider.net, ports: "5200-5209"}
+    - {host: speedtest.ip-projects.de, ports: 5201}
+    - {host: speedtest.fra1.de.leaseweb.net, ports: "5201-5210"}
+  "SE":
+    - {host: speedtest.kamel.network, ports: "5201-5205"}
+    - {host: 185.76.9.135, ports: 5201}
+  "CH":
+    - {host: speedtest.iway.ch, ports: 5201}
+    - {host: speedtest.init7.net, ports: "5201-5204"}
+  "FI":
+    - {host: spd-fisrv.hostkey.com, ports: "5201-5209"}
+  "DK":
+    - {host: speed1.fiberby.dk, ports: "9201-9240"}
+    - {host: speedtest.hiper.dk, ports: "5201-5205"}
+  "PL":
+    - {host: 185.246.208.67, ports: 5201}
+    - {host: speedsrv.multinet24.pl, ports: "5301-5310"}

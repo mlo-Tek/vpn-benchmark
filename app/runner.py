@@ -13,6 +13,7 @@ from .netns import IGNORE_V6, Tunnel, TunnelError, run
 
 WORKER = str(Path(__file__).with_name("worker.py"))
 BUNDLED_TARGETS = Path(__file__).with_name("targets.yaml")
+BUNDLED_REGIONS = Path(__file__).with_name("regions.yaml")
 
 # Live state polled by the UI.
 STATE = {"paused": False, "running": False, "run_id": None, "mode": None, "phase": "idle", "items": {},
@@ -32,6 +33,24 @@ def load_targets():
     # YAML 1.1 reads an unquoted NO as False, so user-supplied files may still contain it.
     fix = lambda cc: "NO" if cc is False else str(cc)  # noqa: E731
     return [{"country": fix(cc), "host": h} for cc, hosts in data.items() for h in hosts]
+
+
+def parse_ports(spec):
+    """5201 / "5201" / "5200-5209" -> [ports]"""
+    spec = str(spec)
+    if "-" in spec:
+        a, b = spec.split("-", 1)
+        return list(range(int(a), int(b) + 1))
+    return [int(spec)]
+
+
+def load_regions():
+    """{country: [{host, ports:[...]}, ...]} from /data/regions.yaml or the bundled file."""
+    path = db.DATA / "regions.yaml"
+    data = yaml.safe_load((path if path.exists() else BUNDLED_REGIONS).read_text())["regions"]
+    fix = lambda cc: "NO" if cc is False else str(cc)  # noqa: E731  (YAML 1.1: NO -> False)
+    return {fix(cc): [{"host": s["host"], "ports": parse_ports(s.get("ports", 5201))} for s in srv]
+            for cc, srv in data.items()}
 
 
 def list_configs():
@@ -120,20 +139,38 @@ async def test_peering(path, idx, targets):
     return result
 
 
-async def test_throughput(path, idx, duration, repeats=1):
+async def test_throughput(path, idx, duration, repeats=1, regions=None):
+    """Global down/up and, if `regions` is given, down/up to every peer country through the
+    same tunnel (one country after another: they all share your line)."""
+    name = cid(path)
     t = Tunnel(path, idx)
     try:
         await t.up()
         await t.wait_handshake()
-        return await t.worker("throughput", {"duration": duration, "repeats": repeats},
-                              timeout=duration * 2 * repeats + 40)
+        set_item(name, stage="Download/Upload messen")
+        tp = await t.worker("throughput", {"duration": duration, "repeats": repeats},
+                            timeout=duration * 2 * repeats + 60)
+        if regions:
+            tp["regions"] = {}
+            for n, (cc, servers) in enumerate(regions.items(), 1):
+                set_item(name, stage=f"Länder-Durchsatz {cc} ({n}/{len(regions)}), iPerf3")
+                try:
+                    r = await t.worker("region", {"country": cc, "servers": servers,
+                                                  "duration": 3, "parallel": 4}, timeout=240)
+                except Exception as e:  # noqa: BLE001
+                    r = {"country": cc, "down": None, "up": None, "down_error": str(e)[:80]}
+                tp["regions"][cc] = r
+                log(f"{name}: {cc} ↓ {r.get('down')} / ↑ {r.get('up')} Mbit/s"
+                    + (f" ({r['down_error']})" if r.get("down_error") and r.get("down") is None else ""))
+        return tp
     finally:
         await t.down()
 
 
-def start(mode, parallel, topn, selected=None, providers=None, tp_runs=1):
+def start(mode, parallel, topn, selected=None, providers=None, tp_runs=1, regions=True):
     global TASK
-    TASK = asyncio.create_task(run_benchmark(mode, parallel, topn, selected, providers, tp_runs))
+    TASK = asyncio.create_task(
+        run_benchmark(mode, parallel, topn, selected, providers, tp_runs, regions))
 
 
 def pause():
@@ -159,7 +196,8 @@ def stop():
     return False
 
 
-async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_runs=1):
+async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_runs=1,
+                        regions=True):
     """mode: peering | standard | full"""
     STATE.update(running=True, mode=mode, phase="baseline", items={}, log=[],
                  started=time.time(), progress=0, total=0, done=0, paused=False)
@@ -175,7 +213,9 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_
         for p in configs:
             set_item(cid(p), status="queued", stage="wartet")
         log(f"{len(configs)} Configs, Modus '{mode}', {parallel} parallel, "
-            f"Durchsatz {tp_runs}x pro Richtung" + (", nur IPv4" if IGNORE_V6 else ""))
+            f"Durchsatz {tp_runs}x pro Richtung" + (", nur IPv4" if IGNORE_V6 else "")
+            + (", Länder-Durchsatz an" if regions and mode != "peering" else ""))
+        region_cfg = load_regions() if regions and mode != "peering" else None
         targets = load_targets()
         weights = db.get_setting("weights", scoring.DEFAULT_WEIGHTS)
 
@@ -217,7 +257,8 @@ async def run_benchmark(mode, parallel, topn, selected=None, providers=None, tp_
                 await GATE.wait()
                 set_item(cid(p), status="throughput", stage="Download/Upload messen", t1=None)
                 try:
-                    results[cid(p)]["throughput"] = tp = await test_throughput(p, 0, 8, tp_runs)
+                    results[cid(p)]["throughput"] = tp = await test_throughput(
+                        p, 0, 8, tp_runs, region_cfg)
                     log(f"{cid(p)}: ↓ {round(tp['dl']['mbps'])} / ↑ {round(tp['ul']['mbps'])} Mbit/s"
                         + (f" (Läufe ↓ {tp['dl']['runs']})" if tp_runs > 1 else ""))
                     db.save_result(run_id, cid(p), results[cid(p)])
