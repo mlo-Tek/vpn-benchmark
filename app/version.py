@@ -2,8 +2,8 @@
 
 VERSION is bumped by hand for releases; GIT_SHA / BUILD_DATE are baked into the image
 by the GitHub Action. The update check compares GIT_SHA with the newest commit on
-main. The repo is private, so it needs an optional GITHUB_TOKEN (fine-grained,
-read-only "Contents"); without it the check reports "unknown".
+main using GitHub's public commits API. No login or token is required; network
+failures and public API rate limits produce an "unknown" update status.
 """
 import asyncio
 import json
@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 GIT_SHA = os.environ.get("GIT_SHA", "dev")
 BUILD_DATE = os.environ.get("BUILD_DATE", "")
 REPO = os.environ.get("GITHUB_REPO", "mlo-Tek/vpn-benchmark")
@@ -28,9 +28,6 @@ def _fetch_latest():
     req = urllib.request.Request(
         f"https://api.github.com/repos/{REPO}/commits/main",
         headers={"Accept": "application/vnd.github+json", "User-Agent": "vpn-benchmark"})
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(req, timeout=8) as r:
         d = json.load(r)
     return {"sha": d["sha"], "message": d["commit"]["message"].splitlines()[0],
@@ -44,8 +41,10 @@ def _check():
     try:
         latest = _fetch_latest()
     except urllib.error.HTTPError as e:
-        hint = ("GITHUB_TOKEN fehlt oder ist ungültig (Repo ist privat)."
-                if e.code in (401, 403, 404) else f"GitHub antwortete mit {e.code}.")
+        hint = ("Öffentliche GitHub-API: Zugriff verweigert oder Rate-Limit erreicht."
+                if e.code in (401, 403) else
+                "Repository/Branch über die GitHub-API nicht gefunden."
+                if e.code == 404 else f"GitHub antwortete mit HTTP {e.code}.")
         return {**base, "status": "unknown", "detail": hint}
     except Exception as e:  # noqa: BLE001
         return {**base, "status": "unknown", "detail": f"Prüfung fehlgeschlagen: {e}"}

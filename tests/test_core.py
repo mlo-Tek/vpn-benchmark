@@ -364,3 +364,50 @@ def test_uploaded_config_is_bounded(tmp_path, monkeypatch):
         data = response.json()
         assert not data["saved"] and len(data["errors"]) == 1
         assert not list(tmp_path.rglob("*.conf"))
+
+
+def test_public_github_update_check_needs_no_token(monkeypatch):
+    """Public update check must never attach user credentials."""
+    import io
+    import json
+    from app import version
+
+    seen = []
+
+    class MockResponse:
+        def __enter__(self):
+            return io.BytesIO(json.dumps({
+                "sha": "a" * 40,
+                "commit": {"message": "Update", "committer": {"date": "2026-10-30T00:00:00Z"}},
+            }).encode("utf-8"))
+
+        def __exit__(self, *args):
+            return None
+
+    def fake_urlopen(req, timeout):
+        seen.append(req)
+        return MockResponse()
+
+    monkeypatch.setenv("GITHUB_TOKEN", "unused-test-token")
+    monkeypatch.setattr(version.urllib.request, "urlopen", fake_urlopen)
+    result = version._fetch_latest()
+    assert result["sha"] == "a" * 40
+    assert len(seen) == 1
+    assert "Authorization" not in seen[0].headers
+    assert "api.github.com/repos/" in seen[0].full_url
+
+
+def test_public_update_check_rate_limit_hint(monkeypatch):
+    import urllib.error
+    from app import version
+
+    monkeypatch.setattr(version, "GIT_SHA", "f" * 40)
+
+    def limited():
+        raise urllib.error.HTTPError("https://api.github.com/", 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr(version, "_fetch_latest", limited)
+    result = version._check()
+    assert result["status"] == "unknown"
+    assert "Rate-Limit" in result["detail"]
+    assert "GITHUB_TOKEN" not in result["detail"]

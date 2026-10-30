@@ -224,7 +224,7 @@
     <div id="verBox" class="muted">…</div>
     <div class="row" style="margin-top:10px"><button class="btn" id="recheck">Jetzt prüfen</button></div>
     <div class="small muted" style="margin-top:10px">Aktualisieren mit Docker Compose: <code>docker compose pull &amp;&amp; docker compose up -d</code>.
-      Für den Update-Check des privaten Repositories optional <code>GITHUB_TOKEN</code> in der lokalen <code>.env</code> hinterlegen (nur Leserechte).</div>
+      Der Update-Check nutzt die öffentliche GitHub-API <b>ohne Anmeldung oder Token</b>. Er vergleicht den enthaltenen Commit mit <code>main</code>; das neue Docker-Image kann noch im Bau sein.</div>
   </div>
   <div class="card">
     <h2>Ranking-Profil &amp; Länder-Gewichte</h2>
