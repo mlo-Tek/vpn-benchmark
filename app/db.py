@@ -64,6 +64,17 @@ def save_result(run_id, name, data):
         c.execute("INSERT INTO results VALUES (?,?,?)", (run_id, name, json.dumps(data)))
 
 
+def delete_run(run_id):
+    with conn() as c:
+        c.execute("DELETE FROM results WHERE run_id=?", (run_id,))
+        return c.execute("DELETE FROM runs WHERE id=?", (run_id,)).rowcount > 0
+
+
+def delete_result(run_id, name):
+    with conn() as c:
+        return c.execute("DELETE FROM results WHERE run_id=? AND name=?", (run_id, name)).rowcount > 0
+
+
 def list_runs():
     with conn() as c:
         return [dict(r) for r in c.execute(

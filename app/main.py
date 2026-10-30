@@ -113,6 +113,27 @@ def run_detail(run_id: int):
     return scored(run)
 
 
+def _not_live(run_id):
+    if runner.STATE["running"] and runner.STATE["run_id"] == run_id:
+        raise HTTPException(409, "Dieser Lauf läuft gerade. Erst stoppen oder abwarten.")
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: int):
+    _not_live(run_id)
+    if not db.delete_run(run_id):
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@app.delete("/api/runs/{run_id}/results")
+def delete_result(run_id: int, name: str):
+    _not_live(run_id)
+    if not db.delete_result(run_id, name):
+        raise HTTPException(404)
+    return {"ok": True}
+
+
 @app.get("/api/runs/{run_id}/log")
 def run_log(run_id: int):
     run = db.get_run(run_id)
