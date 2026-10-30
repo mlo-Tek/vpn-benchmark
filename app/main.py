@@ -3,12 +3,13 @@ import csv
 import io
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, runner, scoring
+from . import configs as cfg
+from . import db, runner, scoring, version
 
 app = FastAPI(title="VPN Benchmark")
 STATIC = Path(__file__).with_name("static")
@@ -37,18 +38,50 @@ def scored(run):
 
 @app.get("/api/configs")
 def configs():
-    return [{"id": runner.cid(p), "provider": runner.provider(p)} for p in runner.list_configs()]
+    return [cfg.describe(p) for p in cfg.list_paths()]
+
+
+@app.post("/api/configs/upload")
+async def upload(files: list[UploadFile] = File(...), provider: str = Form("")):
+    if runner.STATE["running"]:
+        raise HTTPException(409, "während eines Laufs nicht möglich")
+    saved, errors = [], []
+    for f in files:
+        try:
+            saved.append(cfg.save(f.filename or "", await f.read(), provider))
+        except ValueError as e:
+            errors.append(str(e))
+    return {"saved": saved, "errors": errors}
+
+
+@app.delete("/api/configs")
+def delete_config(id: str):
+    if runner.STATE["running"]:
+        raise HTTPException(409, "während eines Laufs nicht möglich")
+    if not cfg.delete(id):
+        raise HTTPException(404)
+    return {"ok": True}
 
 
 @app.post("/api/run")
 async def start(req: RunRequest):
     if runner.STATE["running"]:
-        raise HTTPException(409, "a run is already in progress")
+        raise HTTPException(409, "es läuft bereits ein Test")
     if req.mode not in ("peering", "standard", "full"):
         raise HTTPException(400, "bad mode")
-    asyncio.create_task(runner.run_benchmark(
-        req.mode, max(1, min(req.parallel, 32)), max(1, req.topn), req.selected, req.providers))
+    runner.start(req.mode, max(1, min(req.parallel, 32)), max(1, req.topn),
+                 req.selected, req.providers)
     return {"started": True}
+
+
+@app.post("/api/stop")
+def stop():
+    return {"stopped": runner.stop()}
+
+
+@app.get("/api/version")
+async def get_version(force: bool = False):
+    return await version.check(force)
 
 
 @app.get("/api/status")

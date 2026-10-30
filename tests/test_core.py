@@ -71,3 +71,19 @@ def test_subfolders_are_providers(tmp_path, monkeypatch):
     assert {runner.cid(p) for p in found} == {
         "CryptoStorm/cs-poland", "Windscribe/cs-poland", "top"}
     assert {runner.provider(p) for p in found} == {"CryptoStorm", "Windscribe", "(root)"}
+
+
+def test_upload_validation_and_safety(tmp_path, monkeypatch):
+    from app import configs, db
+    monkeypatch.setattr(db, "CONFIGS", tmp_path)
+    r = configs.save("vpns/CryptoStorm/cs-x.conf", CONF.encode())
+    assert r["id"] == "CryptoStorm/cs-x"
+    r = configs.save("evil.conf", CONF.encode(), provider_name="../../etc")
+    assert (tmp_path / r["id"]).resolve().is_relative_to(tmp_path.resolve())
+    for bad in ("notes.txt", "x.conf"):
+        with pytest.raises(ValueError):
+            configs.save(bad, b"garbage")
+    d = configs.describe(tmp_path / "CryptoStorm" / "cs-x.conf")
+    assert d["endpoint"] == "de-fra.example.net:51820" and "privatekey" not in str(d).lower()
+    assert configs.delete("CryptoStorm/cs-x") and not (tmp_path / "CryptoStorm").exists()
+    assert not configs.delete("../../etc/passwd")

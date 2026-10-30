@@ -9,7 +9,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 
-ENV CONFIG_DIR=/configs DATA_DIR=/data
+ARG GIT_SHA=dev
+ARG BUILD_DATE=
+ENV CONFIG_DIR=/configs DATA_DIR=/data GIT_SHA=$GIT_SHA BUILD_DATE=$BUILD_DATE
 VOLUME ["/configs", "/data"]
 EXPOSE 8080
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
