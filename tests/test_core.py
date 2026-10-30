@@ -132,3 +132,19 @@ def test_delete_run_and_result(tmp_path, monkeypatch):
     assert {r["name"] for r in db.get_run(a)["results"]} == {"x/two"}
     assert db.delete_run(a) and db.get_run(a) is None
     assert len(db.get_run(b)["results"]) == 2  # other run untouched
+
+
+def test_history_build_orders_and_scores():
+    from app import history, scoring
+    def run(i, rtt, err=None):
+        res = {"name": "p/a"}
+        if err:
+            res["error"] = err
+        else:
+            res.update(matrix=scoring.country_stats([{"country": "DE", "host": "x", "median": rtt, "loss": 0, "jitter": 0}]),
+                       swarm={"success": 1.0}, handshake_s=0.3, mtu_ok=True)
+        return {"id": i, "started": 1000 + i, "mode": "peering", "baseline": {}, "results": [res]}
+    h = history.build([run(1, 20), run(2, 0, err="dead"), run(3, 90)], scoring.DEFAULT_WEIGHTS)["p/a"]
+    assert [e["run"] for e in h] == [1, 2, 3]
+    assert h[1]["score"] == 0.0 and h[1]["error"] == "dead" and h[1]["avg_rtt"] is None
+    assert h[0]["score"] > h[2]["score"] > 0

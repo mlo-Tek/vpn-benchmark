@@ -115,6 +115,7 @@
 <nav id="tabs">
   <button data-t="start" class="on">Start</button>
   <button data-t="results">Ergebnisse</button>
+  <button data-t="history">Verlauf</button>
   <button data-t="settings">Einstellungen</button>
 </nav>
 
@@ -179,6 +180,17 @@
   <div id="resBody"><div class="card empty">Noch keine Ergebnisse.</div></div>
 </section>
 
+<!-- ================= HISTORY ================= -->
+<section id="t-history">
+  <div class="card">
+    <h2>Verlauf pro Config</h2>
+    <div class="hint">Alle Läufe zusammen: wer ist <b>konstant</b> gut und wer schwankt? Fehler zählen als Ausfall. Zeile anklicken für den Verlauf im Detail.</div>
+    <div class="row" style="margin-bottom:10px"><input type="search" id="hq" placeholder="Config suchen …" style="flex:1;min-width:200px">
+      <select id="hmin"><option value="1">Alle Configs</option><option value="2">Mind. 2 Läufe</option><option value="3">Mind. 3 Läufe</option></select></div>
+    <div class="scroll"><table id="histTbl"></table></div>
+  </div>
+</section>
+
 <!-- ================= SETTINGS ================= -->
 <section id="t-settings">
   <div class="card">
@@ -220,7 +232,7 @@ function showTab(t) {
   document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "t-" + t));
   store.set("tab", t);
 }
-$("tabs").onclick = e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.t); };
+$("tabs").onclick = e => { const b = e.target.closest("button"); if (b) { showTab(b.dataset.t); if (b.dataset.t === "history") loadHistory(); } };
 
 /* ---------- state ---------- */
 let configs = [], selected = new Set(store.get("sel", [])), provFilter = new Set(), status = { items: {}, running: false, log: [] }, current = null;
@@ -325,7 +337,7 @@ async function poll() {
   if (hasRun) { const lg = $("log"), end = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 20; lg.textContent = s.log.join("\n"); if (end) lg.scrollTop = lg.scrollHeight; }
   if (s.running && s.run_id) { if ($("runs").value != s.run_id) await loadRuns(s.run_id); else await loadRun(s.run_id); }
   renderConfigs();
-  if (lastRunning && !s.running) { await loadRuns(true); toast("Test beendet. Ergebnisse siehst du im Tab „Ergebnisse“."); }
+  if (lastRunning && !s.running) { await loadRuns(true); loadHistory(); toast("Test beendet. Ergebnisse siehst du im Tab „Ergebnisse“."); }
   lastRunning = s.running;
 }
 $("start").onclick = async () => {
@@ -467,6 +479,54 @@ function detail(name) {
 }
 $("dlgClose").onclick = () => $("dlg").close();
 
+/* ---------- history ---------- */
+let hist = {}, hSort = "avg", hDir = -1;
+const mean = a => avg(a, x => x), stdev = a => { const v = a.filter(x => x != null); if (v.length < 2) return 0; const m = mean(v); return Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / v.length); };
+function spark(vals, w = 110, h = 28, color = "var(--accent)") {
+  const v = vals.map(x => x == null ? null : x), nums = v.filter(x => x != null);
+  if (nums.length < 2) return `<span class="muted small">${nums.length ? "1 Lauf" : "–"}</span>`;
+  const lo = Math.min(0, ...nums), hi = Math.max(100, ...nums), X = i => 3 + i / (v.length - 1) * (w - 6), Y = y => h - 3 - (y - lo) / (hi - lo || 1) * (h - 6);
+  let d = "", pen = false; v.forEach((y, i) => { if (y == null) { pen = false; return; } d += `${pen ? "L" : "M"}${X(i).toFixed(1)},${Y(y).toFixed(1)}`; pen = true; });
+  return `<svg width="${w}" height="${h}" style="vertical-align:middle"><path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>` +
+    v.map((y, i) => y == null ? "" : `<circle cx="${X(i).toFixed(1)}" cy="${Y(y).toFixed(1)}" r="2.4" fill="${color}" style="stroke:none;cursor:default"/>`).join("") + `</svg>`;
+}
+async function loadHistory() { try { hist = await api("/api/history"); } catch { return; } renderHistory(); }
+function histRows() {
+  return Object.entries(hist).map(([name, e]) => {
+    const okE = e.filter(x => !x.error), sc = e.map(x => x.score);
+    return { name, e, n: e.length, fails: e.length - okE.length, avg: mean(sc), min: Math.min(...sc), max: Math.max(...sc), sd: stdev(sc),
+      rtt: mean(okE.map(x => x.avg_rtt)), dl: mean(okE.map(x => x.dl)), ul: mean(okE.map(x => x.ul)), last: e[e.length - 1].score };
+  });
+}
+function renderHistory() {
+  const q = $("hq").value.trim().toLowerCase(), minN = +$("hmin").value;
+  let rows = histRows().filter(r => r.n >= minN && (!q || r.name.toLowerCase().includes(q)));
+  rows.sort((a, b) => ((a[hSort] ?? -1) > (b[hSort] ?? -1) ? 1 : -1) * hDir);
+  if (!rows.length) { $("histTbl").innerHTML = `<tr><td class="empty">${Object.keys(hist).length ? "Keine Treffer." : "Noch keine Läufe vorhanden."}</td></tr>`; return; }
+  const th = (k, t, l) => `<th data-k="${k}" class="${l ? "l" : ""}">${t}${hSort === k ? (hDir < 0 ? " ▾" : " ▴") : ""}</th>`;
+  $("histTbl").innerHTML = `<thead><tr>${th("name", "Config", 1)}${th("n", "Läufe")}${th("avg", "Ø Score")}${th("sd", "Schwankung")}<th>Score-Verlauf</th>${th("last", "Letzter")}${th("rtt", "Ø ms")}${th("dl", "Ø ↓")}${th("ul", "Ø ↑")}${th("fails", "Ausfälle")}</tr></thead><tbody>` +
+    rows.map(r => { const unstable = r.n > 1 && (r.sd >= 8 || r.fails > 0);
+      return `<tr class="click" data-h="${esc(r.name)}"><td class="l"><span style="color:${pcolor(provOf(r.name))}">●</span> <b>${esc(r.name)}</b></td><td>${r.n}</td>
+        <td><b style="color:${scoreColor(r.avg)}">${fmt(r.avg, 1)}</b></td>
+        <td title="Standardabweichung des Scores. Niedrig = konstant.">${r.n > 1 ? `<span class="chip ${unstable ? "warn" : "ok"}">${unstable ? "schwankt" : "konstant"}</span> <span class="muted small">±${fmt(r.sd, 1)}</span>` : '<span class="muted small">–</span>'}</td>
+        <td>${spark(r.e.map(x => x.score))}</td><td>${fmt(r.last, 1)}</td><td>${fmt(r.rtt)}</td><td>${fmt(r.dl)}</td><td>${fmt(r.ul)}</td>
+        <td>${r.fails ? `<span class="chip bad">${r.fails} von ${r.n}</span>` : "–"}</td></tr>`; }).join("") + "</tbody>";
+}
+$("histTbl").onclick = e => { const t = e.target.closest("th[data-k]"); if (t) { hDir = hSort === t.dataset.k ? -hDir : -1; hSort = t.dataset.k; renderHistory(); return; }
+  const tr = e.target.closest("tr[data-h]"); if (tr) histDetail(tr.dataset.h); };
+["hq", "hmin"].forEach(i => $(i).oninput = renderHistory);
+function histDetail(name) {
+  const e = hist[name]; if (!e) return;
+  const chart = (title, key, unit, color) => `<div class="card" style="margin:0"><h2>${title}</h2>${spark(e.map(x => x[key]), 330, 70, color)}<div class="small muted">${unit}: ${e.map(x => fmt(x[key], key === "score" ? 1 : 0)).join(" → ")}</div></div>`;
+  $("dlgBody").innerHTML = `<h3 style="margin:0 0 4px">${esc(name)}</h3><div class="muted small" style="margin-bottom:12px">${e.length} Läufe, älteste zuerst</div>
+    <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:12px">${chart("Score", "score", "Score", "var(--accent)")}${chart("Ø Latenz", "avg_rtt", "ms", "var(--warn)")}${chart("Download", "dl", "Mbit/s", "var(--good)")}${chart("Upload", "ul", "Mbit/s", "var(--muted)")}</div>
+    <div class="scroll"><table><thead><tr><th class="l">Lauf</th><th class="l">Zeitpunkt</th><th>Score</th><th>Ø ms</th><th>Swarm</th><th>HS s</th><th>↓</th><th>↑</th></tr></thead><tbody>` +
+    e.slice().reverse().map(x => `<tr><td class="l">#${x.run} <span class="muted small">${esc(x.mode)}</span></td><td class="l muted">${new Date(x.t * 1000).toLocaleString("de-DE")}</td>` +
+      (x.error ? `<td colspan="6" class="l"><span class="chip bad">Fehler</span> <span class="muted small">${esc(x.error).slice(0, 90)}</span></td>` :
+        `<td><b style="color:${scoreColor(x.score)}">${fmt(x.score, 1)}</b></td><td>${fmt(x.avg_rtt)}</td><td>${x.swarm == null ? "–" : fmt(x.swarm * 100) + "%"}</td><td>${fmt(x.hs, 2)}</td><td>${fmt(x.dl)}</td><td>${fmt(x.ul)}</td>`) + "</tr>").join("") + "</tbody></table></div>";
+  $("dlg").showModal();
+}
+
 /* ---------- settings ---------- */
 async function loadVersion(force) {
   let v; try { v = await api("/api/version" + (force ? "?force=true" : "")); } catch { return; }
@@ -489,8 +549,8 @@ $("saveW").onclick = async () => {
 };
 
 /* ---------- init ---------- */
-showTab(["start", "results", "settings"].includes(store.get("tab", "start")) ? store.get("tab", "start") : "start");
-loadConfigs(); loadWeights(); loadVersion(); loadRuns(true); poll(); setInterval(poll, 1500);
+showTab(["start", "results", "history", "settings"].includes(store.get("tab", "start")) ? store.get("tab", "start") : "start");
+loadConfigs(); loadWeights(); loadVersion(); loadRuns(true); loadHistory(); poll(); setInterval(poll, 1500);
 </script>
 </body>
 </html>
