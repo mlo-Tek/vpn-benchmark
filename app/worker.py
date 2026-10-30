@@ -130,7 +130,7 @@ def aggregate(runs):
     throttled/refused run, not a result, and is left out (but still listed)."""
     best = max(r["mbps"] for r in runs)
     good = [r for r in runs if r["mbps"] >= 0.15 * best] or runs
-    med = sorted(r["mbps"] for r in good)[len(good) // 2]
+    med = statistics.median(r["mbps"] for r in good)
     pick = min(good, key=lambda r: abs(r["mbps"] - med))
     return {**pick, "runs": [round(r["mbps"], 1) for r in runs], "excluded": len(runs) - len(good)}
 
@@ -146,7 +146,12 @@ async def throughput(args):
 
     async def run(direction, run_idx):
         counter, rejected, by_src = [0], {}, {}
-        stop = time.monotonic() + duration
+        begin = time.monotonic()
+        stop = begin + duration
+        # Allocate accepted upload bytes to the seconds in which they were sent.
+        # Only successful HTTP responses make the bytes eligible for scoring.
+        accepted_bins = [0] * (int(duration) + 2)
+        confirmed_uploads = [0]
         n = len(DL_SOURCES)
 
         def pick():
@@ -185,22 +190,38 @@ async def throughput(args):
                     await asyncio.sleep(0.3)
 
         async def up():
-            size, block = 10_000_000, b"0" * 65536
+            size, block = 5_000_000, b"0" * 65536
             while time.monotonic() < stop:
                 req = (f"POST /__up HTTP/1.1\r\nHost: {up_host}\r\nContent-Length: {size}\r\n"
                        "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n").encode()
+                w = None
                 try:
                     r, w = await https_request(up_host, req, ctx)
-                    sent = 0
+                    sent, buckets = 0, []
                     while sent < size and time.monotonic() < stop:
                         n = min(len(block), size - sent)
                         w.write(block[:n])
                         await asyncio.wait_for(w.drain(), 5)
                         sent += n
-                        counter[0] += n
-                    w.close()
+                        buckets.append((min(int(time.monotonic() - begin), len(accepted_bins) - 1), n))
+                    if sent != size:
+                        continue
+                    # drain() is a local socket write. It does not prove server
+                    # acceptance. Only count a complete body with a 2xx reply.
+                    status = await read_status(r)
+                    if 200 <= status < 300:
+                        confirmed_uploads[0] += 1
+                        counter[0] += sent
+                        for second, n in buckets:
+                            accepted_bins[second] += n
+                    else:
+                        rejected[status] = rejected.get(status, 0) + 1
                 except Exception:
+                    rejected["network"] = rejected.get("network", 0) + 1
                     await asyncio.sleep(0.3)
+                finally:
+                    if w is not None:
+                        w.close()
 
         async def sampler():
             samples, last = [], 0
@@ -215,9 +236,16 @@ async def throughput(args):
         samples = await sampler()
         for t in tasks:
             t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if direction == "up":
+            samples = [v * 8 / 1e6 for v in accepted_bins[:len(samples)]]
         steady = samples[2:] or samples  # drop TCP slow-start warmup
         mbps = statistics.mean(steady) if steady else 0.0
         out = {"mbps": mbps, "stability": (min(steady) / mbps) if mbps else 0.0}
+        if direction == "up":
+            out["confirmed_uploads"] = confirmed_uploads[0]
+            if rejected:
+                out["rejected"] = rejected
         if direction == "down":
             if by_src:
                 out["source"] = max(by_src, key=by_src.get)  # where most of the data came from
@@ -270,6 +298,7 @@ async def iperf_once(host, ports, reverse, parallel, duration):
             out, _ = await asyncio.wait_for(p.communicate(), duration + 12)
         except asyncio.TimeoutError:
             p.kill()
+            await p.communicate()
             errors.append(f"{port}: Timeout")
             continue
         try:
