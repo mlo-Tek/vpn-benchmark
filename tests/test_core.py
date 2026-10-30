@@ -282,3 +282,44 @@ def test_profile_settings_validate_input(tmp_path, monkeypatch):
         assert client.put("/api/settings", json={"weights": {"DE": 1}, "profile": "invalid"}).status_code == 400
         assert client.put("/api/settings", json={"weights": {"DE": -1}}).status_code == 400
         assert client.put("/api/settings", json={"weights": {"DE": 0}}).status_code == 400
+
+
+def test_optional_bittorrent_peer_config(tmp_path, monkeypatch):
+    from app import db, runner
+    monkeypatch.setattr(db, "DATA", tmp_path)
+    assert runner.list_bittorrent_peers() == []
+    (tmp_path / "bittorrent.yaml").write_text(
+        "peers:\n  - host: 127.0.0.1\n    port: 51413\n    infohash: '" + "ab" * 20 + "'\n")
+    peers = runner.list_bittorrent_peers()
+    assert len(peers) == 1 and peers[0]["port"] == 51413
+    (tmp_path / "bittorrent.yaml").write_text(
+        "peers:\n  - host: 127.0.0.1\n    port: 99999\n    infohash: '" + "ab" * 20 + "'\n")
+    with pytest.raises(ValueError):
+        runner.list_bittorrent_peers()
+
+
+def test_real_bittorrent_handshake_against_local_fixture():
+    import asyncio
+    from app.worker import bittorrent
+
+    async def exercise():
+        async def peer(reader, writer):
+            handshake = await reader.readexactly(68)
+            writer.write(handshake)
+            await writer.drain()
+            writer.close()
+            await writer.wait_closed()
+
+        server = await asyncio.start_server(peer, "127.0.0.1", 0)
+        try:
+            port = server.sockets[0].getsockname()[1]
+            result = await bittorrent({"peers": [{
+                "host": "127.0.0.1", "port": port, "infohash": "ab" * 20}]})
+            assert result["success"] == 1.0
+            assert result["total"] == 1
+            assert result["results"][0]["ok"]
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(exercise())
