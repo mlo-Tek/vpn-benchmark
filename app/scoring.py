@@ -76,8 +76,10 @@ def score(result, weights, baseline=None, profile=DEFAULT_PROFILE):
     num = den = 0.0
     worst = None
     for cc, st in m.items():
-        s = country_score(st, regs.get(cc), ref_dl, ref_ul, profile)
         w = max(0.0, weights.get(cc, 1.0))
+        if w == 0:
+            continue  # Zero-weight countries are excluded even from worst-country penalty.
+        s = country_score(st, regs.get(cc), ref_dl, ref_ul, profile)
         num += w * s
         den += w
         worst = s if worst is None else min(worst, s)
