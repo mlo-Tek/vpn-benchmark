@@ -247,7 +247,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const api = async (u, o) => { const r = await fetch(u, o); if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); } return r.json(); };
+const api = async (u, o = {}) => { if (o.method && !["GET", "HEAD"].includes(o.method.toUpperCase())) o.headers = { ...o.headers, "X-VPN-Benchmark-Request": "1" }; const r = await fetch(u, o); if (!r.ok) { let m = r.statusText; try { m = (await r.json()).detail || m; } catch {} throw new Error(m); } return r.json(); };
 const fmt = (v, d = 0) => v == null || isNaN(v) ? "–" : Number(v).toFixed(d);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
