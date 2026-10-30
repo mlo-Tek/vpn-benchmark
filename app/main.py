@@ -41,6 +41,12 @@ async def optional_basic_auth(request: Request, call_next):
             valid = False
         if not valid:
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="VPN Benchmark"'})
+    # Blocks browser cross-site form posts and credentialed simple requests to
+    # the loopback API. Cross-origin Javascript cannot supply this custom header
+    # without a CORS preflight, which this application does not authorize.
+    if request.url.path.startswith("/api/") and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        if request.headers.get("X-VPN-Benchmark-Request") != "1":
+            return JSONResponse({"detail": "Missing anti-CSRF request header"}, status_code=403)
     return await call_next(request)
 
 
@@ -84,10 +90,14 @@ def configs():
 async def upload(files: list[UploadFile] = File(...), provider: str = Form("")):
     if runner.STATE["running"]:
         raise HTTPException(409, "während eines Laufs nicht möglich")
+    if len(files) > 100:
+        raise HTTPException(413, "maximal 100 Konfigurationsdateien pro Upload")
     saved, errors = [], []
     for f in files:
         try:
-            saved.append(cfg.save(f.filename or "", await f.read(), provider))
+            # Limit memory used per file even for an oversized multipart upload.
+            content = await f.read(cfg.MAX_BYTES + 1)
+            saved.append(cfg.save(f.filename or "", content, provider))
         except ValueError as e:
             errors.append(str(e))
     return {"saved": saved, "errors": errors}
