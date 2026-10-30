@@ -74,6 +74,53 @@ async def swarm(args):
             "total": total}
 
 
+async def bittorrent(args):
+    """Optional *real* outgoing BitTorrent handshake to explicitly supplied test peers.
+
+    This checks outbound TCP peer reachability, NOT tracker discovery, the
+    availability of the torrent, UDP/uTP, incoming port forwarding or seeding speed.
+    """
+    import os
+    peers = args.get("peers") or []
+    if not peers:
+        return {"success": None, "total": 0, "results": []}
+    semaphore = asyncio.Semaphore(5)
+
+    async def one(peer):
+        async with semaphore:
+            host, port = peer["host"], int(peer["port"])
+            infohash = bytes.fromhex(peer["infohash"])
+            writer = None
+            try:
+                ip = await resolve(host)
+                if not ip:
+                    raise OSError("IPv4 DNS lookup failed")
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), 5)
+                peer_id = b"-VB0001-" + os.urandom(12)
+                handshake = bytes([19]) + b"BitTorrent protocol" + bytes(8) + infohash + peer_id
+                t0 = time.perf_counter()
+                writer.write(handshake)
+                await asyncio.wait_for(writer.drain(), 5)
+                reply = await asyncio.wait_for(reader.readexactly(68), 5)
+                ok = (reply[0] == 19 and reply[1:20] == b"BitTorrent protocol"
+                      and reply[28:48] == infohash)
+                return {"host": host, "port": port, "ok": ok,
+                        "ms": round((time.perf_counter() - t0) * 1000, 1) if ok else None}
+            except (OSError, ValueError, asyncio.TimeoutError, asyncio.IncompleteReadError) as e:
+                return {"host": host, "port": port, "ok": False, "error": str(e)[:100]}
+            finally:
+                if writer is not None:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+
+    results = await asyncio.gather(*(one(p) for p in peers[:25]))
+    return {"success": sum(r["ok"] for r in results) / len(results),
+            "total": len(results), "results": results}
+
+
 async def https_request(host, request, ctx):
     r, w = await asyncio.open_connection(host, 443, ssl=ctx, server_hostname=host)
     w.write(request)
@@ -346,7 +393,7 @@ async def region(args):
     return out
 
 
-COMMANDS = {"region": region, "matrix": matrix, "swarm": swarm, "info": info, "throughput": throughput}
+COMMANDS = {"region": region, "matrix": matrix, "swarm": swarm, "bittorrent": bittorrent, "info": info, "throughput": throughput}
 
 if __name__ == "__main__":
     payload = json.loads(sys.stdin.read() or "{}")
